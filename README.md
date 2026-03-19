@@ -1,1 +1,2 @@
-# Grub-Guide-Group-1-SWE
+# Grub Guide
+A tool for seamlessly organizing and visualizing the food in your kitchen.
