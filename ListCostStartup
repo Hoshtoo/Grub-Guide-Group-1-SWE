@@ -1,0 +1,7 @@
+!pip install requests python-dotenv
+
+from google.colab import userdata
+import os
+
+os.environ["KROGER_CLIENT_ID"] = userdata.get("KROGER_CLIENT_ID")
+os.environ["KROGER_CLIENT_SECRET"] = userdata.get("KROGER_CLIENT_SECRET")
