@@ -1,0 +1,420 @@
+import os
+import base64
+import requests
+import ipywidgets as widgets
+from IPython.display import display, clear_output, HTML
+
+TOKEN_URL     = "https://api.kroger.com/v1/connect/oauth2/token"
+PRODUCTS_URL  = "https://api.kroger.com/v1/products"
+LOCATIONS_URL = "https://api.kroger.com/v1/locations"
+
+# ── Default shopping list ─────────────────────
+DEFAULT_ITEMS = [
+    "milk",
+    "large eggs",
+    "bread",
+    "chicken",
+    "cheese",
+    "vegetable",
+    "ground beef",
+    "fruit",
+]
+
+# ── Auth ──────────────────────────────────────
+def get_access_token(client_id, client_secret):
+    credentials = base64.b64encode(
+        f"{client_id}:{client_secret}".encode()
+    ).decode()
+    response = requests.post(
+        TOKEN_URL,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {credentials}",
+        },
+        data={"grant_type": "client_credentials", "scope": "product.compact"},
+        timeout=10,
+    )
+    if response.status_code != 200:
+        return None, f"Token error ({response.status_code}): {response.text}"
+    return response.json()["access_token"], None
+
+# ── Locations ─────────────────────────────────
+def search_locations(token, zip_code, limit=5):
+    response = requests.get(
+        LOCATIONS_URL,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        params={"filter.zipCode.near": zip_code, "filter.limit": limit},
+        timeout=10,
+    )
+    if response.status_code != 200:
+        return [], f"Location error ({response.status_code})"
+    return response.json().get("data", []), None
+
+# ── Products ──────────────────────────────────
+def search_products(token, search_term, location_id, limit=10):
+    response = requests.get(
+        PRODUCTS_URL,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        params={
+            "filter.term":       search_term,
+            "filter.locationId": location_id,
+            "filter.limit":      limit,
+        },
+        timeout=10,
+    )
+    if response.status_code != 200:
+        return []
+    return response.json().get("data", [])
+
+def extract_price(product):
+    items = product.get("items", [])
+    if not items:
+        return None
+    price_info = items[0].get("price", {})
+    return price_info.get("promo") or price_info.get("regular")
+
+# ═══════════════════════════════════════════════
+# STEP 1 — Shopping List Editor UI
+# ═══════════════════════════════════════════════
+def show_shopping_list_editor():
+    display(HTML("""
+    <style>
+      .kroger-header {
+        background: #0057A8; color: white;
+        padding: 14px 20px; border-radius: 8px 8px 0 0;
+        font-family: 'Georgia', serif; font-size: 20px; font-weight: bold;
+        letter-spacing: 0.5px;
+      }
+      .kroger-subheader {
+        background: #F5F5F5; border: 1px solid #ddd; border-top: none;
+        padding: 10px 20px; font-family: sans-serif; font-size: 13px; color: #555;
+        border-radius: 0 0 8px 8px; margin-bottom: 16px;
+      }
+      .step-label {
+        font-family: sans-serif; font-weight: bold;
+        font-size: 15px; color: #0057A8; margin: 12px 0 6px 0;
+      }
+    </style>
+    <div class="kroger-header">🛒 Kroger Grocery Price Calculator</div>
+    <div class="kroger-subheader">Edit your shopping list below, then click <b>Continue →</b></div>
+    <div class="step-label">Step 1 of 3 — Shopping List</div>
+    """))
+
+    item_inputs = []
+    rows = []
+
+    list_box = widgets.VBox([])
+
+    def make_remove_handler(row, text_widget):
+        def handler(b):
+            if row in rows:
+                rows.remove(row)
+            if text_widget in item_inputs:
+                item_inputs.remove(text_widget)
+            list_box.children = list(rows)
+        return handler
+
+    for item in DEFAULT_ITEMS:
+        text = widgets.Text(
+            value=item,
+            layout=widgets.Layout(width="340px"),
+            style={"description_width": "0px"},
+        )
+        remove_btn = widgets.Button(
+            description="✕",
+            button_style="danger",
+            layout=widgets.Layout(width="40px", height="32px"),
+        )
+        row = widgets.HBox([text, remove_btn])
+        remove_btn.on_click(make_remove_handler(row, text))
+        item_inputs.append(text)
+        rows.append(row)
+
+    list_box.children = list(rows)
+
+    new_item_input = widgets.Text(
+        placeholder="Add a new item...",
+        layout=widgets.Layout(width="280px"),
+    )
+    add_btn = widgets.Button(
+        description="+ Add",
+        button_style="info",
+        layout=widgets.Layout(width="80px"),
+    )
+
+    continue_btn = widgets.Button(
+        description="Continue →",
+        button_style="success",
+        layout=widgets.Layout(width="140px", margin="14px 0 0 0"),
+    )
+
+    output = widgets.Output()
+    display(list_box, widgets.HBox([new_item_input, add_btn]), continue_btn, output)
+
+    def on_add(b):
+        val = new_item_input.value.strip()
+        if not val:
+            return
+        text = widgets.Text(
+            value=val,
+            layout=widgets.Layout(width="340px"),
+            style={"description_width": "0px"},
+        )
+        remove_btn = widgets.Button(
+            description="✕",
+            button_style="danger",
+            layout=widgets.Layout(width="40px", height="32px"),
+        )
+        row = widgets.HBox([text, remove_btn])
+        remove_btn.on_click(make_remove_handler(row, text))
+        item_inputs.append(text)
+        rows.append(row)
+        list_box.children = list(rows)
+        new_item_input.value = ""
+
+    add_btn.on_click(on_add)
+
+    def on_continue(b):
+        shopping_list = [t.value.strip() for t in item_inputs if t.value.strip()]
+        if not shopping_list:
+            with output:
+                clear_output()
+                print("⚠️ Please add at least one item.")
+            return
+        clear_output(wait=True)
+        show_store_selector(shopping_list)
+
+    continue_btn.on_click(on_continue)
+
+
+# ═══════════════════════════════════════════════
+# STEP 2 — Zip Code & Store Selector UI
+# ═══════════════════════════════════════════════
+def show_store_selector(shopping_list):
+    display(HTML("""
+    <div style="background:#0057A8;color:white;padding:14px 20px;border-radius:8px 8px 0 0;
+    font-family:'Georgia',serif;font-size:20px;font-weight:bold;">🛒 Kroger Grocery Price Calculator</div>
+    <div style="background:#F5F5F5;border:1px solid #ddd;border-top:none;padding:10px 20px;
+    font-family:sans-serif;font-size:13px;color:#555;border-radius:0 0 8px 8px;margin-bottom:16px;">
+    Find your nearest Kroger store to get accurate local prices.</div>
+    <div style="font-family:sans-serif;font-weight:bold;font-size:15px;color:#0057A8;margin:12px 0 6px 0;">
+    Step 2 of 3 — Select Your Store</div>
+    """))
+
+    zip_input = widgets.Text(
+        description="Zip Code:",
+        placeholder="e.g. 30533",
+        layout=widgets.Layout(width="280px"),
+    )
+    search_btn = widgets.Button(
+        description="🔍 Find Stores",
+        button_style="primary",
+        layout=widgets.Layout(width="140px"),
+    )
+    store_dropdown = widgets.Dropdown(
+        options=[],
+        description="Store:",
+        layout=widgets.Layout(width="500px", display="none"),
+        style={"description_width": "60px"},
+    )
+    confirm_btn = widgets.Button(
+        description="Continue →",
+        button_style="success",
+        layout=widgets.Layout(width="140px", margin="10px 0 0 0", display="none"),
+    )
+
+    output      = widgets.Output()
+    location_map = {}
+
+    display(widgets.HBox([zip_input, search_btn]), store_dropdown, confirm_btn, output)
+
+    def on_search(b):
+        zip_code = zip_input.value.strip()
+        if not zip_code.isdigit() or len(zip_code) != 5:
+            with output:
+                clear_output()
+                print("⚠️ Please enter a valid 5-digit zip code.")
+            return
+
+        with output:
+            clear_output()
+            print(f"Searching for stores near {zip_code}...")
+
+        token, err = get_access_token(
+            os.environ["KROGER_CLIENT_ID"],
+            os.environ["KROGER_CLIENT_SECRET"],
+        )
+        if err:
+            with output:
+                clear_output()
+                print(f"❌ {err}")
+            return
+
+        locations, err = search_locations(token, zip_code)
+        if err or not locations:
+            with output:
+                clear_output()
+                print("❌ No stores found. Try another zip code.")
+            return
+
+        location_map.clear()
+        options = []
+        for loc in locations:
+            name   = loc.get("name", "Unknown")
+            chain  = loc.get("chain", "")
+            addr   = loc.get("address", {})
+            street = addr.get("addressLine1", "")
+            city   = addr.get("city", "")
+            state  = addr.get("state", "")
+            loc_id = loc.get("locationId", "")
+            label  = f"{chain} {name} — {street}, {city}, {state}"
+            location_map[label] = loc_id
+            options.append(label)
+
+        store_dropdown.options              = options
+        store_dropdown.layout.display       = ""
+        confirm_btn.layout.display          = ""
+        with output:
+            clear_output()
+            print(f"✓ Found {len(locations)} stores near {zip_code}.")
+
+    search_btn.on_click(on_search)
+
+    def on_confirm(b):
+        loc_id = location_map.get(store_dropdown.value)
+        if not loc_id:
+            with output:
+                print("⚠️ Please select a store.")
+            return
+        clear_output(wait=True)
+        run_product_search(shopping_list, loc_id, store_dropdown.value)
+
+    confirm_btn.on_click(on_confirm)
+
+
+# ═══════════════════════════════════════════════
+# STEP 3 — Product Selection & Receipt
+# ═══════════════════════════════════════════════
+def run_product_search(shopping_list, location_id, store_name):
+    display(HTML(f"""
+    <div style="background:#0057A8;color:white;padding:14px 20px;border-radius:8px 8px 0 0;
+    font-family:'Georgia',serif;font-size:20px;font-weight:bold;">🛒 Kroger Grocery Price Calculator</div>
+    <div style="background:#F5F5F5;border:1px solid #ddd;border-top:none;padding:10px 20px;
+    font-family:sans-serif;font-size:13px;color:#555;border-radius:0 0 8px 8px;margin-bottom:16px;">
+    📍 {store_name}</div>
+    <div style="font-family:sans-serif;font-weight:bold;font-size:15px;color:#0057A8;margin:12px 0 6px 0;">
+    Step 3 of 3 — Select Products</div>
+    """))
+
+    token, err = get_access_token(
+        os.environ["KROGER_CLIENT_ID"],
+        os.environ["KROGER_CLIENT_SECRET"],
+    )
+    if err:
+        print(f"❌ {err}")
+        return
+
+    dropdowns    = []
+    product_maps = []
+
+    for term in shopping_list:
+        products = search_products(token, term, location_id)
+        if not products:
+            display(HTML(f"<p style='font-family:sans-serif;color:#888;'>⚠️ No results for <b>{term}</b> — skipping.</p>"))
+            continue
+
+        options = {"-- Skip --": None}
+        for p in products:
+            name      = p.get("description", "Unknown")
+            brand     = p.get("brand", "")
+            size      = p.get("items", [{}])[0].get("size", "")
+            price     = extract_price(p)
+            price_str = f"${price:.2f}" if price is not None else "N/A"
+            label     = f"{brand} {name} — {size}  →  {price_str}"
+            options[label] = p
+
+        dd = widgets.Dropdown(
+            options=list(options.keys()),
+            description=f"{term}:",
+            layout=widgets.Layout(width="580px"),
+            style={"description_width": "160px"},
+        )
+        dropdowns.append(dd)
+        product_maps.append(options)
+        display(dd)
+
+    total_btn      = widgets.Button(
+        description="🧾 Calculate Total",
+        button_style="success",
+        layout=widgets.Layout(width="180px", margin="16px 0 0 0"),
+    )
+    receipt_output = widgets.Output()
+    display(total_btn, receipt_output)
+
+    def on_total(b):
+        cart = []
+        for dd, pmap in zip(dropdowns, product_maps):
+            product = pmap.get(dd.value)
+            if product:
+                cart.append(product)
+
+        with receipt_output:
+            clear_output()
+            if not cart:
+                print("⚠️ No items selected.")
+                return
+
+            subtotal  = 0.0
+            missing   = []
+            rows_html = ""
+            for product in cart:
+                name  = product.get("description", "Unknown")
+                brand = product.get("brand", "")
+                price = extract_price(product)
+                if price is not None:
+                    subtotal += price
+                    rows_html += f"""
+                    <tr>
+                      <td style="padding:6px 12px;font-family:sans-serif;">{brand} {name}</td>
+                      <td style="padding:6px 12px;text-align:right;font-family:sans-serif;">${price:.2f}</td>
+                    </tr>"""
+                else:
+                    missing.append(f"{brand} {name}")
+                    rows_html += f"""
+                    <tr style="color:#999;">
+                      <td style="padding:6px 12px;font-family:sans-serif;">{brand} {name}</td>
+                      <td style="padding:6px 12px;text-align:right;font-family:sans-serif;">N/A</td>
+                    </tr>"""
+
+            missing_html = ""
+            if missing:
+                items = "".join(f"<li>{m}</li>" for m in missing)
+                missing_html = f"<p style='font-family:sans-serif;color:#e07b00;'>⚠️ Prices unavailable for:<ul>{items}</ul></p>"
+
+            display(HTML(f"""
+            <table style="border-collapse:collapse;width:100%;max-width:520px;
+            border:1px solid #ddd;border-radius:8px;overflow:hidden;margin-top:12px;">
+              <thead>
+                <tr style="background:#0057A8;color:white;">
+                  <th style="padding:10px 12px;text-align:left;font-family:sans-serif;">Item</th>
+                  <th style="padding:10px 12px;text-align:right;font-family:sans-serif;">Price</th>
+                </tr>
+              </thead>
+              <tbody>{rows_html}</tbody>
+              <tfoot>
+                <tr style="background:#F5F5F5;font-weight:bold;">
+                  <td style="padding:10px 12px;font-family:sans-serif;">TOTAL</td>
+                  <td style="padding:10px 12px;text-align:right;font-family:sans-serif;">${subtotal:.2f}</td>
+                </tr>
+              </tfoot>
+            </table>
+            {missing_html}
+            """))
+
+    total_btn.on_click(on_total)
+
+
+# ═══════════════════════════════════════════════
+# Launch
+# ═══════════════════════════════════════════════
+show_shopping_list_editor()
