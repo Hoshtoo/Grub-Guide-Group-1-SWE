@@ -1,0 +1,8 @@
+This code can be run in Google Colab and is written in Python. 
+In the startup segment, things needed for the environment's preparation are imported.
+The user_id and user_secret from the Kroger API must be entered in the environment, separately from the code. There is a "secrets" section for this in Google Colab.
+This separation and confidentiality of the secret is neccesary for the security of the secret, because if the code contained it while being distributed to users or published, the secret would not be secure.
+For now, the front-end user interface is baked into the python and not yet in the React framework.
+For this to work while maintaining the CIA security triad, users must input their own API secret and ID, which may present a convenience issue.
+A potential solution might be a backend Python flask which securely holds the secret for users to access via a frontend.
+Code made with Claude AI.
