@@ -1,58 +1,141 @@
-function InventoryItem({ item, onDelete }) {
+const LOCATION_ICONS = {
+    Fridge: "&#x1F9CA;",
+    Freezer: "&#x2744;&#xFE0F;",
+    Pantry: "&#x1F3E0;",
+    Counter: "&#x1F372;"
+}
+
+function InventoryItem({ item, onDelete, onEdit }) {
+    const locationLabel = item.location || "Pantry"
+
     return (
         <div style={styles.card}>
-            <div style={styles.info}>
-                <span style={styles.name}>{item.item_name}</span>
-                <span style={styles.detail}>
-          Qty: {item.quantity} {item.unit}
-        </span>
+            <div style={styles.topRow}>
+                <div style={styles.nameRow}>
+                    <span style={styles.name}>{item.item_name}</span>
+                    <span style={styles.qty}>
+                        {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+                    </span>
+                </div>
+                <div style={styles.actions}>
+                    <button
+                        style={styles.editBtn}
+                        onClick={() => onEdit(item)}
+                        title="Edit item"
+                    >
+                        &#9998;
+                    </button>
+                    <button
+                        style={styles.deleteBtn}
+                        onClick={() => onDelete(item.id)}
+                        title="Delete item"
+                    >
+                        &#128465;
+                    </button>
+                </div>
+            </div>
+
+            <div style={styles.metaRow}>
+                <span
+                    style={styles.locationBadge}
+                    dangerouslySetInnerHTML={{
+                        __html: `${LOCATION_ICONS[locationLabel] || ""} ${locationLabel}`
+                    }}
+                />
+                {item.household_tag && (
+                    <span style={styles.householdBadge}>
+                        {item.household_tag}
+                    </span>
+                )}
                 {item.expiration_date && (
                     <span style={styles.expiry}>
-            Expires: {item.expiration_date}
-          </span>
+                        Exp: {item.expiration_date}
+                    </span>
                 )}
             </div>
-            <button style={styles.deleteBtn} onClick={() => onDelete(item.id)}>
-                🗑
-            </button>
         </div>
     )
 }
 
 const styles = {
     card: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
         backgroundColor: "#f4f9f6",
         borderRadius: "10px",
         padding: "12px 16px",
-        marginBottom: "10px"
+        marginBottom: "8px"
     },
-    info: {
+    topRow: {
         display: "flex",
-        flexDirection: "column"
+        justifyContent: "space-between",
+        alignItems: "flex-start"
+    },
+    nameRow: {
+        display: "flex",
+        alignItems: "baseline",
+        gap: "10px",
+        flexWrap: "wrap"
     },
     name: {
         fontWeight: "bold",
-        fontSize: "16px",
+        fontSize: "15px",
         color: "#1b4332"
     },
-    detail: {
+    qty: {
         fontSize: "13px",
         color: "#555",
-        marginTop: "2px"
+        backgroundColor: "#e8f0eb",
+        padding: "2px 8px",
+        borderRadius: "6px"
     },
-    expiry: {
-        fontSize: "12px",
-        color: "#e07b39",
-        marginTop: "2px"
+    actions: {
+        display: "flex",
+        gap: "4px",
+        flexShrink: 0
+    },
+    editBtn: {
+        background: "none",
+        border: "none",
+        fontSize: "16px",
+        cursor: "pointer",
+        padding: "2px 6px",
+        borderRadius: "4px",
+        color: "#2d6a4f"
     },
     deleteBtn: {
         background: "none",
         border: "none",
-        fontSize: "18px",
-        cursor: "pointer"
+        fontSize: "16px",
+        cursor: "pointer",
+        padding: "2px 6px",
+        borderRadius: "4px",
+        color: "#c0392b"
+    },
+    metaRow: {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        marginTop: "6px",
+        flexWrap: "wrap"
+    },
+    locationBadge: {
+        fontSize: "12px",
+        color: "#2d6a4f",
+        backgroundColor: "#d8f3dc",
+        padding: "2px 8px",
+        borderRadius: "6px",
+        fontWeight: "500"
+    },
+    householdBadge: {
+        fontSize: "12px",
+        color: "#5a4a8a",
+        backgroundColor: "#ede9f6",
+        padding: "2px 8px",
+        borderRadius: "6px"
+    },
+    expiry: {
+        fontSize: "12px",
+        color: "#e07b39",
+        fontWeight: "500"
     }
 }
 

@@ -1,79 +1,183 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
-function AddItemForm({ onAddItem }) {
+const CATEGORIES = [
+    "Dairy",
+    "Produce",
+    "Meat & Seafood",
+    "Grains & Bread",
+    "Canned Goods",
+    "Snacks",
+    "Beverages",
+    "Condiments & Sauces",
+    "Frozen",
+    "Other"
+]
+
+const LOCATIONS = ["Fridge", "Freezer", "Pantry", "Counter"]
+
+function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit }) {
     const [itemName, setItemName] = useState("")
     const [quantity, setQuantity] = useState(1)
     const [unit, setUnit] = useState("")
+    const [category, setCategory] = useState("")
+    const [location, setLocation] = useState("")
+    const [householdTag, setHouseholdTag] = useState("")
     const [expirationDate, setExpirationDate] = useState("")
 
-    function handleSubmit(e) {
-        e.preventDefault()
-        if (!itemName) return
+    useEffect(() => {
+        if (editingItem) {
+            setItemName(editingItem.item_name || "")
+            setQuantity(editingItem.quantity || 1)
+            setUnit(editingItem.unit || "")
+            setCategory(editingItem.category || "")
+            setLocation(editingItem.location || "")
+            setHouseholdTag(editingItem.household_tag || "")
+            setExpirationDate(editingItem.expiration_date || "")
+        }
+    }, [editingItem])
 
-        onAddItem({
-            item_name: itemName,
-            quantity: quantity,
-            unit: unit,
-            expiration_date: expirationDate
-        })
-
-        // Clear the form after submitting
+    function resetForm() {
         setItemName("")
         setQuantity(1)
         setUnit("")
+        setCategory("")
+        setLocation("")
+        setHouseholdTag("")
         setExpirationDate("")
+    }
+
+    function handleSubmit(e) {
+        e.preventDefault()
+        if (!itemName.trim()) return
+
+        const payload = {
+            item_name: itemName.trim(),
+            quantity: Number(quantity),
+            unit: unit.trim(),
+            category: category || "Other",
+            location: location || "Pantry",
+            household_tag: householdTag.trim() || null,
+            expiration_date: expirationDate || null
+        }
+
+        if (editingItem) {
+            onUpdateItem(editingItem.id, payload)
+        } else {
+            onAddItem(payload)
+        }
+
+        resetForm()
+    }
+
+    function handleCancel() {
+        resetForm()
+        onCancelEdit()
     }
 
     return (
         <div style={styles.container}>
-            <h2 style={styles.title}>Add Grocery Item</h2>
+            <h2 style={styles.title}>
+                {editingItem ? "Edit Item" : "Add Grocery Item"}
+            </h2>
 
-            <div style={styles.inputGroup}>
-                <label style={styles.label}>Item Name *</label>
-                <input
-                    style={styles.input}
-                    type="text"
-                    placeholder="e.g. Milk"
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                />
+            <div style={styles.row}>
+                <div style={{ ...styles.inputGroup, flex: 2 }}>
+                    <label style={styles.label}>Item Name *</label>
+                    <input
+                        style={styles.input}
+                        type="text"
+                        placeholder="e.g. Milk"
+                        value={itemName}
+                        onChange={(e) => setItemName(e.target.value)}
+                    />
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Qty</label>
+                    <input
+                        style={styles.input}
+                        type="number"
+                        min="1"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value)}
+                    />
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Unit</label>
+                    <input
+                        style={styles.input}
+                        type="text"
+                        placeholder="oz, lbs"
+                        value={unit}
+                        onChange={(e) => setUnit(e.target.value)}
+                    />
+                </div>
             </div>
 
-            <div style={styles.inputGroup}>
-                <label style={styles.label}>Quantity</label>
-                <input
-                    style={styles.input}
-                    type="number"
-                    min="1"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                />
+            <div style={styles.row}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Category</label>
+                    <select
+                        style={styles.input}
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                    >
+                        <option value="">Select category</option>
+                        {CATEGORIES.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Location</label>
+                    <select
+                        style={styles.input}
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                    >
+                        <option value="">Select location</option>
+                        {LOCATIONS.map((l) => (
+                            <option key={l} value={l}>{l}</option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
-            <div style={styles.inputGroup}>
-                <label style={styles.label}>Unit (optional)</label>
-                <input
-                    style={styles.input}
-                    type="text"
-                    placeholder="e.g. gallons, oz, bags"
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value)}
-                />
+            <div style={styles.row}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Household Tag (optional)</label>
+                    <input
+                        style={styles.input}
+                        type="text"
+                        placeholder="e.g. Apt 4B, The Smiths"
+                        value={householdTag}
+                        onChange={(e) => setHouseholdTag(e.target.value)}
+                    />
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Expiration Date</label>
+                    <input
+                        style={styles.input}
+                        type="date"
+                        value={expirationDate}
+                        onChange={(e) => setExpirationDate(e.target.value)}
+                    />
+                </div>
             </div>
 
-            <div style={styles.inputGroup}>
-                <label style={styles.label}>Expiration Date (optional)</label>
-                <input
-                    style={styles.input}
-                    type="date"
-                    value={expirationDate}
-                    onChange={(e) => setExpirationDate(e.target.value)}
-                />
+            <div style={styles.buttonRow}>
+                <button style={styles.button} onClick={handleSubmit}>
+                    {editingItem ? "Save Changes" : "+ Add Item"}
+                </button>
+                {editingItem && (
+                    <button style={styles.cancelButton} onClick={handleCancel}>
+                        Cancel
+                    </button>
+                )}
             </div>
-
-            <button style={styles.button} onClick={handleSubmit}>
-                + Add Item
-            </button>
         </div>
     )
 }
@@ -82,43 +186,68 @@ const styles = {
     container: {
         backgroundColor: "#fff",
         borderRadius: "12px",
-        padding: "20px",
-        maxWidth: "400px",
+        padding: "24px",
+        maxWidth: "600px",
         margin: "0 auto",
         boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
     },
     title: {
         fontSize: "20px",
         marginBottom: "16px",
-        color: "#2d6a4f"
+        color: "#2d6a4f",
+        margin: "0 0 16px"
+    },
+    row: {
+        display: "flex",
+        gap: "12px",
+        marginBottom: "14px"
     },
     inputGroup: {
-        marginBottom: "14px"
+        display: "flex",
+        flexDirection: "column"
     },
     label: {
         display: "block",
-        fontSize: "14px",
+        fontSize: "13px",
         marginBottom: "4px",
-        color: "#555"
+        color: "#555",
+        fontWeight: "500"
     },
     input: {
         width: "100%",
         padding: "10px",
         borderRadius: "8px",
         border: "1px solid #ccc",
-        fontSize: "16px",
-        boxSizing: "border-box"
+        fontSize: "14px",
+        boxSizing: "border-box",
+        backgroundColor: "#fff"
+    },
+    buttonRow: {
+        display: "flex",
+        gap: "10px",
+        marginTop: "8px"
     },
     button: {
-        width: "100%",
+        flex: 1,
         padding: "12px",
         backgroundColor: "#2d6a4f",
         color: "white",
         border: "none",
         borderRadius: "8px",
-        fontSize: "16px",
+        fontSize: "15px",
         cursor: "pointer",
-        marginTop: "8px"
+        fontWeight: "500"
+    },
+    cancelButton: {
+        flex: 1,
+        padding: "12px",
+        backgroundColor: "#fff",
+        color: "#666",
+        border: "1px solid #ccc",
+        borderRadius: "8px",
+        fontSize: "15px",
+        cursor: "pointer",
+        fontWeight: "500"
     }
 }
 

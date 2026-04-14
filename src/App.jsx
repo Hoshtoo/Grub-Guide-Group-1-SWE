@@ -1,91 +1,180 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { supabase } from "./supabaseClient"
 import AddItemForm from "./components/AddItemForm"
+import SearchBar from "./components/SearchBar"
+import FilterBar from "./components/FilterBar"
 import InventoryList from "./components/InventoryList"
 
 function App() {
-  const [items, setItems] = useState([])
+    const [items, setItems] = useState([])
+    const [searchQuery, setSearchQuery] = useState("")
+    const [categoryFilter, setCategoryFilter] = useState("")
+    const [locationFilter, setLocationFilter] = useState("")
+    const [editingItem, setEditingItem] = useState(null)
 
-  useEffect(() => {
-    fetchItems()
+    useEffect(() => {
+        fetchItems()
 
-    const channel = supabase
-        .channel("realtime-inventory")
-        .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "inventory_items"
-            },
-            (payload) => {
-              console.log("Realtime event received:", payload)
-              fetchItems()
-            }
-        )
-        .subscribe((status) => {
-          console.log("Realtime subscription status:", status)
-        })
+        const channel = supabase
+            .channel("realtime-inventory")
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "inventory_items"
+                },
+                () => {
+                    fetchItems()
+                }
+            )
+            .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [])
+
+    async function fetchItems() {
+        const { data, error } = await supabase
+            .from("inventory_items")
+            .select("*")
+            .order("updated_at", { ascending: false, nullsFirst: false })
+
+        if (error) {
+            console.error("Error fetching items:", error)
+        } else {
+            setItems(data)
+        }
     }
-  }, [])
 
-  async function fetchItems() {
-    const { data, error } = await supabase
-        .from("inventory_items")
-        .select("*")
-        .order("created_at", { ascending: false })
+    async function handleAddItem(newItem) {
+        const { error } = await supabase
+            .from("inventory_items")
+            .insert([newItem])
 
-    if (error) {
-      console.error("Error fetching items:", error)
-    } else {
-      console.log("Fetched items:", data)
-      setItems(data)
+        if (error) {
+            console.error("Error adding item:", error)
+        }
     }
-  }
 
-  async function handleAddItem(newItem) {
-    const { error } = await supabase
-        .from("inventory_items")
-        .insert([newItem])
+    async function handleUpdateItem(id, updatedFields) {
+        const { error } = await supabase
+            .from("inventory_items")
+            .update(updatedFields)
+            .eq("id", id)
 
-    if (error) {
-      console.error("Error adding item:", error)
+        if (error) {
+            console.error("Error updating item:", error)
+        }
+        setEditingItem(null)
     }
-  }
 
-  async function handleDelete(id) {
-    const { error } = await supabase
-        .from("inventory_items")
-        .delete()
-        .eq("id", id)
+    async function handleDelete(id) {
+        const { error } = await supabase
+            .from("inventory_items")
+            .delete()
+            .eq("id", id)
 
-    if (error) {
-      console.error("Error deleting item:", error)
+        if (error) {
+            console.error("Error deleting item:", error)
+        }
     }
-  }
 
-  return (
-      <div style={styles.page}>
-        <h1 style={styles.header}>🥦 Grub Guide</h1>
-        <p style={styles.subtitle}>Shared Household Inventory</p>
-        <AddItemForm onAddItem={handleAddItem} />
-        <div style={styles.listContainer}>
-          <h3 style={styles.listTitle}>Current Pantry</h3>
-          <InventoryList items={items} onDelete={handleDelete} />
+    const filteredItems = useMemo(() => {
+        let result = items
+
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase()
+            result = result.filter((item) =>
+                item.item_name.toLowerCase().includes(q)
+            )
+        }
+
+        if (categoryFilter) {
+            result = result.filter((item) => item.category === categoryFilter)
+        }
+
+        if (locationFilter) {
+            result = result.filter((item) => item.location === locationFilter)
+        }
+
+        return result
+    }, [items, searchQuery, categoryFilter, locationFilter])
+
+    return (
+        <div style={styles.page}>
+            <header style={styles.headerSection}>
+                <h1 style={styles.header}>Grub Guide</h1>
+                <p style={styles.subtitle}>Shared Household Inventory</p>
+            </header>
+
+            <AddItemForm
+                onAddItem={handleAddItem}
+                editingItem={editingItem}
+                onUpdateItem={handleUpdateItem}
+                onCancelEdit={() => setEditingItem(null)}
+            />
+
+            <div style={styles.dashboardSection}>
+                <h3 style={styles.dashboardTitle}>Inventory Dashboard</h3>
+
+                <SearchBar
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                />
+
+                <FilterBar
+                    categoryFilter={categoryFilter}
+                    locationFilter={locationFilter}
+                    onCategoryChange={setCategoryFilter}
+                    onLocationChange={setLocationFilter}
+                />
+
+                <InventoryList
+                    items={filteredItems}
+                    onDelete={handleDelete}
+                    onEdit={setEditingItem}
+                />
+            </div>
         </div>
-      </div>
-  )
+    )
 }
 
 const styles = {
-  page: { minHeight: "100vh", backgroundColor: "#f0f7f4", padding: "20px" },
-  header: { textAlign: "center", color: "#1b4332", fontSize: "28px", marginBottom: "4px" },
-  subtitle: { textAlign: "center", color: "#555", marginBottom: "24px" },
-  listContainer: { maxWidth: "400px", margin: "24px auto 0" },
-  listTitle: { color: "#2d6a4f", marginBottom: "12px" }
+    page: {
+        minHeight: "100vh",
+        backgroundColor: "#f0f7f4",
+        padding: "20px 16px 40px"
+    },
+    headerSection: {
+        textAlign: "center",
+        marginBottom: "24px"
+    },
+    header: {
+        color: "#1b4332",
+        fontSize: "32px",
+        marginBottom: "4px",
+        fontWeight: "700",
+        margin: "0 0 4px"
+    },
+    subtitle: {
+        textAlign: "center",
+        color: "#555",
+        margin: "0 0 8px",
+        fontSize: "15px"
+    },
+    dashboardSection: {
+        maxWidth: "600px",
+        margin: "28px auto 0"
+    },
+    dashboardTitle: {
+        color: "#2d6a4f",
+        marginBottom: "8px",
+        fontSize: "20px",
+        fontWeight: "600",
+        margin: "0 0 8px"
+    }
 }
 
 export default App
