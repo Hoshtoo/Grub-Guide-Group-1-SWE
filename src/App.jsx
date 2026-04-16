@@ -131,6 +131,7 @@ async function handleAddItem(newItem) {
                 editingItem={editingItem}
                 onUpdateItem={handleUpdateItem}
                 onCancelEdit={() => setEditingItem(null)}
+                existingItems={items}
             />
 
             <div style={styles.dashboardSection}>

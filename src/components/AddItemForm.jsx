@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 
 const CATEGORIES = [
     "Dairy",
@@ -15,7 +15,18 @@ const CATEGORIES = [
 
 const LOCATIONS = ["Fridge", "Freezer", "Pantry", "Counter"]
 
-function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit }) {
+function findDuplicates(name, existingItems, editingItemId) {
+    const trimmed = name.trim().toLowerCase()
+    if (trimmed.length < 2) return []
+
+    return existingItems.filter((item) => {
+        if (editingItemId && item.id === editingItemId) return false
+        const existing = item.item_name.toLowerCase()
+        return existing === trimmed || existing.includes(trimmed) || trimmed.includes(existing)
+    })
+}
+
+function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, existingItems = [] }) {
     const [itemName, setItemName] = useState("")
     const [quantity, setQuantity] = useState(1)
     const [unit, setUnit] = useState("")
@@ -23,6 +34,12 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit }) {
     const [location, setLocation] = useState("")
     const [householdTag, setHouseholdTag] = useState("")
     const [expirationDate, setExpirationDate] = useState("")
+    const [duplicateDismissed, setDuplicateDismissed] = useState(false)
+
+    const duplicates = useMemo(
+        () => findDuplicates(itemName, existingItems, editingItem?.id),
+        [itemName, existingItems, editingItem]
+    )
 
     useEffect(() => {
         if (editingItem) {
@@ -44,6 +61,12 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit }) {
         setLocation("")
         setHouseholdTag("")
         setExpirationDate("")
+        setDuplicateDismissed(false)
+    }
+
+    function handleItemNameChange(value) {
+        setItemName(value)
+        setDuplicateDismissed(false)
     }
 
     function handleSubmit(e) {
@@ -88,7 +111,7 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit }) {
                         type="text"
                         placeholder="e.g. Milk"
                         value={itemName}
-                        onChange={(e) => setItemName(e.target.value)}
+                        onChange={(e) => handleItemNameChange(e.target.value)}
                     />
                 </div>
 
@@ -114,6 +137,38 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit }) {
                     />
                 </div>
             </div>
+
+            {duplicates.length > 0 && !duplicateDismissed && !editingItem && (
+                <div style={styles.duplicateWarning}>
+                    <div style={styles.duplicateHeader}>
+                        <span style={styles.duplicateTitle}>
+                            &#x26A0; Already in stock
+                        </span>
+                        <button
+                            style={styles.dismissBtn}
+                            onClick={() => setDuplicateDismissed(true)}
+                            title="Dismiss"
+                        >
+                            &#x2715;
+                        </button>
+                    </div>
+                    <ul style={styles.duplicateList}>
+                        {duplicates.map((d) => (
+                            <li key={d.id} style={styles.duplicateItem}>
+                                <strong>{d.item_name}</strong>
+                                {" \u2014 "}
+                                {d.quantity}{d.unit ? ` ${d.unit}` : ""}
+                                {" in "}
+                                {d.location || "Pantry"}
+                                {d.household_tag ? ` (${d.household_tag})` : ""}
+                            </li>
+                        ))}
+                    </ul>
+                    <p style={styles.duplicateHint}>
+                        Consider updating the existing item instead of adding a duplicate.
+                    </p>
+                </div>
+            )}
 
             <div style={styles.row}>
                 <div style={{ ...styles.inputGroup, flex: 1 }}>
@@ -248,6 +303,47 @@ const styles = {
         fontSize: "15px",
         cursor: "pointer",
         fontWeight: "500"
+    },
+    duplicateWarning: {
+        backgroundColor: "#fff8e1",
+        border: "1px solid #ffe082",
+        borderRadius: "8px",
+        padding: "12px 16px",
+        marginBottom: "14px"
+    },
+    duplicateHeader: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: "6px"
+    },
+    duplicateTitle: {
+        fontSize: "14px",
+        fontWeight: "600",
+        color: "#e65100"
+    },
+    dismissBtn: {
+        background: "none",
+        border: "none",
+        fontSize: "14px",
+        cursor: "pointer",
+        color: "#999",
+        padding: "0 4px"
+    },
+    duplicateList: {
+        margin: "0 0 6px",
+        paddingLeft: "20px"
+    },
+    duplicateItem: {
+        fontSize: "13px",
+        color: "#5d4037",
+        marginBottom: "2px"
+    },
+    duplicateHint: {
+        fontSize: "12px",
+        color: "#8d6e63",
+        margin: 0,
+        fontStyle: "italic"
     }
 }
 
