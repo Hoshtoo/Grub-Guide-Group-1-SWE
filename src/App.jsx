@@ -5,6 +5,8 @@ import SearchBar from "./components/SearchBar"
 import FilterBar from "./components/FilterBar"
 import InventoryList from "./components/InventoryList"
 
+import BakingTracker from "./components/BakingTracker"
+
 function App() {
     const [items, setItems] = useState([])
     const [searchQuery, setSearchQuery] = useState("")
@@ -35,28 +37,40 @@ function App() {
         }
     }, [])
 
-    async function fetchItems() {
-        const { data, error } = await supabase
-            .from("inventory_items")
-            .select("*")
-            .order("updated_at", { ascending: false, nullsFirst: false })
+    // 1. Update fetchItems to check local storage if database is empty
+async function fetchItems() {
+    const { data, error } = await supabase
+        .from("inventory_items")
+        .select("*")
+        .order("updated_at", { ascending: false });
 
-        if (error) {
-            console.error("Error fetching items:", error)
-        } else {
-            setItems(data)
-        }
+    if (error || !data || data.length === 0) {
+        console.warn("Database unavailable, loading from local storage...");
+        const localData = JSON.parse(localStorage.getItem("grub_guide_backup") || "[]");
+        setItems(localData);
+    } else {
+        setItems(data);
     }
+}
 
-    async function handleAddItem(newItem) {
-        const { error } = await supabase
-            .from("inventory_items")
-            .insert([newItem])
 
-        if (error) {
-            console.error("Error adding item:", error)
-        }
-    }
+async function handleAddItem(newItem) {
+    const itemWithMeta = { 
+        ...newItem, 
+        id: Math.random().toString(36).substr(2, 9),
+        created_at: new Date().toISOString() 
+    };
+
+    
+    const newItemsList = [itemWithMeta, ...items];
+    setItems(newItemsList);
+
+    
+    localStorage.setItem("grub_guide_backup", JSON.stringify(newItemsList));
+
+
+    await supabase.from("inventory_items").insert([newItem]);
+}
 
     async function handleUpdateItem(id, updatedFields) {
         const { error } = await supabase
@@ -71,15 +85,18 @@ function App() {
     }
 
     async function handleDelete(id) {
-        const { error } = await supabase
-            .from("inventory_items")
-            .delete()
-            .eq("id", id)
+    const updatedItems = items.filter(item => item.id !== id);
+    setItems(updatedItems);
+    localStorage.setItem("grub_guide_backup", JSON.stringify(updatedItems));
+    const { error } = await supabase
+        .from("inventory_items")
+        .delete()
+        .eq("id", id);
 
-        if (error) {
-            console.error("Error deleting item:", error)
-        }
+    if (error) {
+        console.warn("Database sync failed, but item removed locally for demo.");
     }
+}
 
     const filteredItems = useMemo(() => {
         let result = items
@@ -137,6 +154,10 @@ function App() {
                     onEdit={setEditingItem}
                 />
             </div>
+           
+            <div style={styles.bakingSection}>
+                <BakingTracker supabaseItems={items} />
+            </div>
         </div>
     )
 }
@@ -174,7 +195,12 @@ const styles = {
         fontSize: "20px",
         fontWeight: "600",
         margin: "0 0 8px"
-    }
+    },
+
+    bakingSection: { maxWidth: "600px",
+         margin: "40px auto 0", 
+         borderTop: "2px solid #b7e4c7", 
+         paddingTop: "20px" }
 }
 
 export default App
