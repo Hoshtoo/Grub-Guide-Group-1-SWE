@@ -1,3 +1,4 @@
-pandas
-pytesseract
-Pillow
+flask
+flask-cors
+requests
+python-dotenv

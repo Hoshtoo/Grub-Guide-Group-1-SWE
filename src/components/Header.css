@@ -1,0 +1,33 @@
+.site-header {
+  background: var(--blue);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.16);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  color: white;
+  letter-spacing: 0.3px;
+}
+
+.logo-accent {
+  color: var(--gold);
+}
+
+.site-badge {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 13px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+}
