@@ -13,6 +13,7 @@ function App() {
     const [categoryFilter, setCategoryFilter] = useState("")
     const [locationFilter, setLocationFilter] = useState("")
     const [editingItem, setEditingItem] = useState(null)
+    const [timeTick, setTimeTick] = useState(Date.now())
 
     useEffect(() => {
         fetchItems()
@@ -35,6 +36,14 @@ function App() {
         return () => {
             supabase.removeChannel(channel)
         }
+    }, [])
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setTimeTick(Date.now())
+        }, 30000)
+
+        return () => clearInterval(timer)
     }, [])
 
     // 1. Update fetchItems to check local storage if database is empty
@@ -98,6 +107,10 @@ async function handleAddItem(newItem) {
     }
 }
 
+    function handleEdit(item) {
+        setEditingItem(item)
+    }
+
     const filteredItems = useMemo(() => {
         let result = items
 
@@ -119,45 +132,73 @@ async function handleAddItem(newItem) {
         return result
     }, [items, searchQuery, categoryFilter, locationFilter])
 
+    const duplicateItemIds = useMemo(() => {
+        const TEN_MINUTES_MS = 10 * 60 * 1000
+        const now = timeTick
+        const groupedByName = new Map()
+
+        items.forEach((item) => {
+            const key = (item.item_name || "").trim().toLowerCase()
+            if (!key) return
+            if (!groupedByName.has(key)) groupedByName.set(key, [])
+            groupedByName.get(key).push(item)
+        })
+
+        const ids = new Set()
+
+        groupedByName.forEach((group) => {
+            if (group.length < 2) return
+
+            group.forEach((item) => {
+                const createdAtMs = new Date(item.created_at).getTime()
+                if (Number.isNaN(createdAtMs)) return
+                if (now - createdAtMs <= TEN_MINUTES_MS) {
+                    ids.add(item.id)
+                }
+            })
+        })
+
+        return ids
+    }, [items, timeTick])
+
     return (
         <div style={styles.page}>
-            <header style={styles.headerSection}>
-                <h1 style={styles.header}>Grub Guide</h1>
-                <p style={styles.subtitle}>Shared Household Inventory</p>
-            </header>
-
-            <AddItemForm
-                onAddItem={handleAddItem}
-                editingItem={editingItem}
-                onUpdateItem={handleUpdateItem}
-                onCancelEdit={() => setEditingItem(null)}
-                existingItems={items}
-            />
-
-            <div style={styles.dashboardSection}>
-                <h3 style={styles.dashboardTitle}>Inventory Dashboard</h3>
-
+            <div style={styles.header}>
+                <div style={styles.headerTitle}>
+                    Grub<span style={styles.headerTitleAccent}>Guide</span>
+                </div>
+                <div style={styles.subtitle}>Shared Pantry</div>
+            </div>
+            <div style={styles.body}>
+                <AddItemForm
+                    onAddItem={handleAddItem}
+                    editingItem={editingItem}
+                    onUpdateItem={handleUpdateItem}
+                    onCancelEdit={() => setEditingItem(null)}
+                    existingItems={items}
+                />
                 <SearchBar
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
                 />
-
                 <FilterBar
                     categoryFilter={categoryFilter}
                     locationFilter={locationFilter}
                     onCategoryChange={setCategoryFilter}
                     onLocationChange={setLocationFilter}
                 />
-
-                <InventoryList
-                    items={filteredItems}
-                    onDelete={handleDelete}
-                    onEdit={setEditingItem}
-                />
-            </div>
-           
-            <div style={styles.bakingSection}>
-                <BakingTracker supabaseItems={items} />
+                <div style={styles.listContainer}>
+                    <div style={styles.listHeader}>
+                        <div style={styles.listTitle}>Pantry</div>
+                        <div style={styles.itemCount}>{filteredItems.length} items</div>
+                    </div>
+                    <InventoryList
+                        items={filteredItems}
+                        onDelete={handleDelete}
+                        onEdit={handleEdit}
+                        duplicateItemIds={duplicateItemIds}
+                    />
+                </div>
             </div>
         </div>
     )
@@ -166,42 +207,72 @@ async function handleAddItem(newItem) {
 const styles = {
     page: {
         minHeight: "100vh",
-        backgroundColor: "#f0f7f4",
-        padding: "20px 16px 40px"
-    },
-    headerSection: {
-        textAlign: "center",
-        marginBottom: "24px"
+        backgroundColor: "#0f1a14",
+        padding: "0 0 40px 0",
+        maxWidth: "480px",
+        margin: "0 auto"
     },
     header: {
-        color: "#1b4332",
-        fontSize: "32px",
-        marginBottom: "4px",
-        fontWeight: "700",
-        margin: "0 0 4px"
+        padding: "28px 24px 20px",
+        borderBottom: "0.5px solid rgba(255,255,255,0.08)",
+        display: "flex",
+        alignItems: "center",
+        gap: "10px"
+    },
+    headerTitle: {
+        fontFamily: "'DM Serif Display', serif",
+        fontSize: "22px",
+        color: "#a8d5b5",
+        letterSpacing: "-0.3px"
+    },
+    headerTitleAccent: {
+        color: "#4caf78"
     },
     subtitle: {
-        textAlign: "center",
-        color: "#555",
-        margin: "0 0 8px",
-        fontSize: "15px"
+        fontSize: "11px",
+        letterSpacing: "2px",
+        textTransform: "uppercase",
+        color: "rgba(168,213,181,0.5)",
+        marginLeft: "auto"
     },
-    dashboardSection: {
-        maxWidth: "600px",
-        margin: "28px auto 0"
+    body: {
+        padding: "24px"
     },
-    dashboardTitle: {
-        color: "#2d6a4f",
-        marginBottom: "8px",
-        fontSize: "20px",
-        fontWeight: "600",
-        margin: "0 0 8px"
+    listContainer: {
+        marginTop: "0"
     },
-
-    bakingSection: { maxWidth: "600px",
-         margin: "40px auto 0", 
-         borderTop: "2px solid #b7e4c7", 
-         paddingTop: "20px" }
+    listHeader: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: "14px"
+    },
+    listTitle: {
+        fontSize: "10px",
+        letterSpacing: "2.5px",
+        textTransform: "uppercase",
+        color: "rgba(255,255,255,0.3)"
+    },
+    itemCount: {
+        fontSize: "11px",
+        background: "rgba(76,175,120,0.15)",
+        color: "#4caf78",
+        padding: "3px 10px",
+        borderRadius: "20px",
+        border: "0.5px solid rgba(76,175,120,0.3)"
+    },
+    undoBtn: {
+        width: "100%",
+        padding: "10px",
+        marginBottom: "12px",
+        backgroundColor: "rgba(232,132,90,0.15)",
+        color: "#e8845a",
+        border: "0.5px solid rgba(232,132,90,0.3)",
+        borderRadius: "8px",
+        fontSize: "13px",
+        fontWeight: "500",
+        cursor: "pointer"
+    }
 }
 
 export default App

@@ -38,18 +38,20 @@ const styles = {
         position: "absolute",
         left: "14px",
         fontSize: "16px",
-        color: "#888",
+        color: "rgba(232,240,234,0.5)",
         pointerEvents: "none"
     },
     input: {
         width: "100%",
         padding: "12px 40px 12px 42px",
         borderRadius: "10px",
-        border: "1px solid #ccc",
+        border: "0.5px solid rgba(255,255,255,0.12)",
         fontSize: "15px",
         boxSizing: "border-box",
-        backgroundColor: "#fff",
-        outline: "none"
+        backgroundColor: "rgba(255,255,255,0.06)",
+        color: "#e8f0ea",
+        outline: "none",
+        boxShadow: "0 0 0 1px rgba(15,26,20,0.2) inset"
     },
     clearBtn: {
         position: "absolute",
@@ -57,7 +59,7 @@ const styles = {
         background: "none",
         border: "none",
         fontSize: "20px",
-        color: "#999",
+        color: "rgba(232,240,234,0.55)",
         cursor: "pointer",
         padding: "4px 8px",
         lineHeight: 1

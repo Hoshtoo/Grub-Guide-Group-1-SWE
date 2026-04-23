@@ -1,33 +1,41 @@
-* {
+*, *::before, *::after {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 body {
-    margin: 0;
-    font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'DM Sans', sans-serif;
+    background-color: #0f1a14;
+    color: #e8f0ea;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    background-color: #f0f7f4;
-    color: #333;
-}
-
-#root {
-    max-width: 100%;
-    margin: 0 auto;
     min-height: 100vh;
 }
 
-input:focus,
-select:focus {
-    outline: 2px solid #2d6a4f;
-    outline-offset: -1px;
-    border-color: #2d6a4f;
-}
-
-button:hover {
-    opacity: 0.9;
+button, input, select {
+    font-family: 'DM Sans', sans-serif;
 }
 
 select {
-    appearance: auto;
+    color-scheme: dark;
+}
+
+select option {
+    background-color: #15231b;
+    color: #e8f0ea;
+}
+
+input {
+    background: rgba(255,255,255,0.06);
+    border: 0.5px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #e8f0ea;
+    font-size: 14px;
+    outline: none;
+    width: 100%;
+}
+
+input::placeholder {
+    color: rgba(255,255,255,0.2);
 }

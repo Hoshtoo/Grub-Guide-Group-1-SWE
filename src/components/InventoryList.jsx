@@ -37,7 +37,7 @@ function groupByCategory(items) {
     return sortedEntries
 }
 
-function InventoryList({ items, onDelete, onEdit }) {
+function InventoryList({ items, onDelete, onEdit, duplicateItemIds = new Set() }) {
     if (items.length === 0) {
         return (
             <div style={styles.empty}>
@@ -74,6 +74,7 @@ function InventoryList({ items, onDelete, onEdit }) {
                             item={item}
                             onDelete={onDelete}
                             onEdit={onEdit}
+                            isDuplicate={duplicateItemIds.has(item.id)}
                         />
                     ))}
                 </div>
