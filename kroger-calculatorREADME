@@ -1,0 +1,19 @@
+Kroger Shopping List Creator
+Returns a shopping list with prices (if available from Kroger API) based on selected store and selected items.
+
+Installation
+Python requried
+
+RUN: pip install -r requirements.txt
+
+This command installs requirements such as flask and dotenv
+
+Node.js requried: nvm install --lts (bash) OR nvm install lts (powershell)
+
+Backend server setup: Run two terminals: Flask and Vite
+
+  Python app.py
+  cd kroger-calculator
+  npm run dev
+Deployment
+when "http://localhost:5173" is returned, open link to access the app
