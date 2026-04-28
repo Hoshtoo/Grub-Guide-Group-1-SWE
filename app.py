@@ -1,16 +1,3 @@
-"""
-Kroger Grocery Price Calculator — Flask Backend
-================================================
-Stores your Kroger credentials securely server-side.
-Users never see or need the API secret.
-
-Setup on Replit:
-  1. In Replit Secrets, add:
-       KROGER_CLIENT_ID     → your client id
-       KROGER_CLIENT_SECRET → your client secret
-  2. In Shell: pip install flask flask-cors requests
-  3. Click Run — your app goes live on a public URL
-"""
 
 import os
 import time
