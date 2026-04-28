@@ -1,32 +1,28 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 
 const CATEGORIES = [
-    "Dairy",
-    "Produce",
-    "Meat & Seafood",
-    "Grains & Bread",
-    "Canned Goods",
-    "Snacks",
-    "Beverages",
-    "Condiments & Sauces",
-    "Frozen",
-    "Other"
+    "Dairy", "Produce", "Meat & Seafood", "Grains & Bread",
+    "Canned Goods", "Snacks", "Beverages", "Condiments & Sauces",
+    "Frozen", "Other"
 ]
 
 const LOCATIONS = ["Fridge", "Freezer", "Pantry", "Counter"]
 
-function findDuplicates(name, existingItems, editingItemId) {
-    const trimmed = name.trim().toLowerCase()
-    if (trimmed.length < 2) return []
+// SMART DEFAULTS ENGINE
+const CATEGORY_DEFAULTS = {
+    "Dairy": { shelfLife: 7, weeklyUsage: 1, loc: "Fridge" },
+    "Produce": { shelfLife: 5, weeklyUsage: 3, loc: "Fridge" },
+    "Meat & Seafood": { shelfLife: 3, weeklyUsage: 2, loc: "Fridge" },
+    "Grains & Bread": { shelfLife: 10, weeklyUsage: 2, loc: "Pantry" },
+    "Canned Goods": { shelfLife: 365, weeklyUsage: 0.5, loc: "Pantry" },
+    "Snacks": { shelfLife: 30, weeklyUsage: 1, loc: "Pantry" },
+    "Beverages": { shelfLife: 14, weeklyUsage: 4, loc: "Fridge" },
+    "Condiments & Sauces": { shelfLife: 180, weeklyUsage: 0.2, loc: "Fridge" },
+    "Frozen": { shelfLife: 90, weeklyUsage: 1, loc: "Freezer" },
+    "Other": { shelfLife: 14, weeklyUsage: 1, loc: "Pantry" }
+};
 
-    return existingItems.filter((item) => {
-        if (editingItemId && item.id === editingItemId) return false
-        const existing = item.item_name.toLowerCase()
-        return existing === trimmed || existing.includes(trimmed) || trimmed.includes(existing)
-    })
-}
-
-function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, existingItems = [] }) {
+function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit }) {
     const [itemName, setItemName] = useState("")
     const [quantity, setQuantity] = useState(1)
     const [unit, setUnit] = useState("")
@@ -34,12 +30,9 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
     const [location, setLocation] = useState("")
     const [householdTag, setHouseholdTag] = useState("")
     const [expirationDate, setExpirationDate] = useState("")
-    const [duplicateDismissed, setDuplicateDismissed] = useState(false)
-
-    const duplicates = useMemo(
-        () => findDuplicates(itemName, existingItems, editingItem?.id),
-        [itemName, existingItems, editingItem]
-    )
+    const [weeklyUsage, setWeeklyUsage] = useState(0)
+    const [shelfLife, setShelfLife] = useState("")
+    const [brandName, setBrandName] = useState("")
 
     useEffect(() => {
         if (editingItem) {
@@ -50,8 +43,20 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
             setLocation(editingItem.location || "")
             setHouseholdTag(editingItem.household_tag || "")
             setExpirationDate(editingItem.expiration_date || "")
+            setBrandName(editingItem.brand_name || "")
+            setShelfLife(editingItem.shelf_life || "")
+            setWeeklyUsage(editingItem.weekly_usage || 0) 
         }
     }, [editingItem])
+
+    const handleCategoryChange = (selectedCategory) => {
+        setCategory(selectedCategory);
+        if (!editingItem && CATEGORY_DEFAULTS[selectedCategory]) {
+            setShelfLife(CATEGORY_DEFAULTS[selectedCategory].shelfLife);
+            setWeeklyUsage(CATEGORY_DEFAULTS[selectedCategory].weeklyUsage);
+            setLocation(CATEGORY_DEFAULTS[selectedCategory].loc);
+        }
+    };
 
     function resetForm() {
         setItemName("")
@@ -61,226 +66,221 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
         setLocation("")
         setHouseholdTag("")
         setExpirationDate("")
-        setDuplicateDismissed(false)
+        setBrandName("")
+        setShelfLife("")
+        setWeeklyUsage(0)
     }
 
-    function handleItemNameChange(value) {
-        setItemName(value)
-        setDuplicateDismissed(false)
-    }
+    const handleSubmit = (e) => {
+        if (e) e.preventDefault();
+        if (!itemName.trim() || !quantity) return;
 
-    function handleSubmit(e) {
-        e.preventDefault()
-        if (!itemName.trim()) return
-
-        const payload = {
+        const newItem = {
             item_name: itemName.trim(),
             quantity: Number(quantity),
             unit: unit.trim(),
             category: category || "Other",
             location: location || "Pantry",
             household_tag: householdTag.trim() || null,
-            expiration_date: expirationDate || null
-        }
+            expiration_date: expirationDate || null,
+            brand_name: brandName.trim() || "Generic",
+            shelf_life: Number(shelfLife) || 14,
+            weekly_usage: Number(weeklyUsage) || 0 
+        };
 
         if (editingItem) {
-            onUpdateItem(editingItem.id, payload)
+            onUpdateItem(editingItem.id, newItem);
         } else {
-            onAddItem(payload)
+            onAddItem(newItem);
         }
-
-        resetForm()
-    }
-
-    function handleCancel() {
-        resetForm()
-        onCancelEdit()
-    }
+        resetForm();
+    };
 
     return (
-        <div style={styles.container}>
-            <h2 style={styles.title}>
-                {editingItem ? "Edit Item" : "Add Grocery Item"}
-            </h2>
+    <div style={styles.container}>
+        <h2 style={styles.title}>
+            {editingItem ? "Edit Item" : "Add Grocery Item"}
+        </h2>
 
-            <div style={styles.row}>
-                <div style={{ ...styles.inputGroup, flex: 2 }}>
-                    <label style={styles.label}>Item Name *</label>
-                    <input
-                        style={styles.input}
-                        type="text"
-                        placeholder="e.g. Milk"
-                        value={itemName}
-                        onChange={(e) => handleItemNameChange(e.target.value)}
-                    />
-                </div>
-
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Qty</label>
-                    <input
-                        style={styles.input}
-                        type="number"
-                        min="1"
-                        value={quantity}
-                        onChange={(e) => setQuantity(e.target.value)}
-                    />
-                </div>
-
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Unit</label>
-                    <input
-                        style={styles.input}
-                        type="text"
-                        placeholder="oz, lbs"
-                        value={unit}
-                        onChange={(e) => setUnit(e.target.value)}
-                    />
-                </div>
+        <div style={styles.row}>
+            <div style={{ ...styles.inputGroup, flex: 2 }}>
+                <label style={styles.label}>Item Name *</label>
+                <input
+                    style={styles.input}
+                    type="text"
+                    placeholder="e.g. Milk"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                />
             </div>
-
-            {duplicates.length > 0 && !duplicateDismissed && !editingItem && (
-                <div style={styles.duplicateWarning}>
-                    <div style={styles.duplicateHeader}>
-                        <span style={styles.duplicateTitle}>
-                            &#x26A0; Already in stock
-                        </span>
-                        <button
-                            style={styles.dismissBtn}
-                            onClick={() => setDuplicateDismissed(true)}
-                            title="Dismiss"
-                        >
-                            &#x2715;
-                        </button>
-                    </div>
-                    <ul style={styles.duplicateList}>
-                        {duplicates.map((d) => (
-                            <li key={d.id} style={styles.duplicateItem}>
-                                <strong>{d.item_name}</strong>
-                                {" \u2014 "}
-                                {d.quantity}{d.unit ? ` ${d.unit}` : ""}
-                                {" in "}
-                                {d.location || "Pantry"}
-                                {d.household_tag ? ` (${d.household_tag})` : ""}
-                            </li>
-                        ))}
-                    </ul>
-                    <p style={styles.duplicateHint}>
-                        Consider updating the existing item instead of adding a duplicate.
-                    </p>
-                </div>
-            )}
-
-            <div style={styles.row}>
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Category</label>
-                    <select
-                        style={styles.input}
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                    >
-                        <option value="">Select category</option>
-                        {CATEGORIES.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Location</label>
-                    <select
-                        style={styles.input}
-                        value={location}
-                        onChange={(e) => setLocation(e.target.value)}
-                    >
-                        <option value="">Select location</option>
-                        {LOCATIONS.map((l) => (
-                            <option key={l} value={l}>{l}</option>
-                        ))}
-                    </select>
-                </div>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Qty</label>
+                <input
+                    style={styles.input}
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                />
             </div>
-
-            <div style={styles.row}>
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Household Tag (optional)</label>
-                    <input
-                        style={styles.input}
-                        type="text"
-                        placeholder="e.g. Apt 4B, The Smiths"
-                        value={householdTag}
-                        onChange={(e) => setHouseholdTag(e.target.value)}
-                    />
-                </div>
-
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Expiration Date</label>
-                    <input
-                        style={styles.input}
-                        type="date"
-                        value={expirationDate}
-                        onChange={(e) => setExpirationDate(e.target.value)}
-                    />
-                </div>
-            </div>
-
-            <div style={styles.buttonRow}>
-                <button style={styles.button} onClick={handleSubmit}>
-                    {editingItem ? "Save Changes" : "+ Add Item"}
-                </button>
-                {editingItem && (
-                    <button style={styles.cancelButton} onClick={handleCancel}>
-                        Cancel
-                    </button>
-                )}
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Unit</label>
+                <input
+                    style={styles.input}
+                    type="text"
+                    placeholder="oz, lbs"
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                />
             </div>
         </div>
-    )
+
+        <div style={styles.row}>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Category</label>
+                <select
+                    style={styles.input}
+                    value={category}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                >
+                    <option value="">Select category</option>
+                    {CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                    ))}
+                </select>
+            </div>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Location</label>
+                <select
+                    style={styles.input}
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                >
+                    <option value="">Select location</option>
+                    {LOCATIONS.map((l) => (
+                        <option key={l} value={l}>{l}</option>
+                    ))}
+                </select>
+            </div>
+        </div>
+
+        <div style={styles.row}>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Household Tag</label>
+                <input
+                    style={styles.input}
+                    type="text"
+                    placeholder="e.g. Apt 4B"
+                    value={householdTag}
+                    onChange={(e) => setHouseholdTag(e.target.value)}
+                />
+            </div>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Expiration Date</label>
+                <input
+                    style={styles.input}
+                    type="date"
+                    value={expirationDate}
+                    onChange={(e) => setExpirationDate(e.target.value)}
+                />
+            </div>
+        </div>
+        
+        <div style={styles.row}>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Brand Name</label>
+                <input
+                    style={styles.input}
+                    type="text"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                />
+            </div>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Est. Shelf Life (Days)</label>
+                <input
+                    style={styles.input}
+                    type="number"
+                    value={shelfLife}
+                    onChange={(e) => setShelfLife(e.target.value)}
+                />
+            </div>
+        </div>
+
+        <div style={styles.row}>
+            <div style={{ ...styles.inputGroup, flex: 1 }}>
+                <label style={styles.label}>Weekly Consumption (Units)</label>
+                <input
+                    style={styles.input}
+                    type="number"
+                    step="0.1"
+                    value={weeklyUsage}
+                    onChange={(e) => setWeeklyUsage(e.target.value)}
+                />
+            </div>
+        </div>
+
+        <div style={styles.buttonRow}>
+            <button style={styles.button} onClick={handleSubmit}>
+                {editingItem ? "Save Changes" : "+ Add Item"}
+            </button>
+            {editingItem && (
+                <button style={styles.cancelButton} onClick={onCancelEdit}>
+                    Cancel
+                </button>
+            )}
+        </div>
+    </div>
+)
 }
 
 const styles = {
     container: {
-        backgroundColor: "#fff",
-        borderRadius: "12px",
+        background: "rgba(255, 255, 255, 0.03)",
+        borderRadius: "14px",
         padding: "24px",
         maxWidth: "600px",
         margin: "0 auto",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+        border: "0.5px solid rgba(255, 255, 255, 0.08)",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.2)"
     },
     title: {
-        fontSize: "20px",
-        marginBottom: "16px",
-        color: "#2d6a4f",
-        margin: "0 0 16px"
+        fontSize: "18px",
+        marginBottom: "20px",
+        color: "#e8f0ea", 
+        fontWeight: "500",
+        letterSpacing: "0.5px"
     },
     row: {
         display: "flex",
         gap: "12px",
-        marginBottom: "14px"
+        marginBottom: "16px"
     },
     inputGroup: {
         display: "flex",
         flexDirection: "column"
     },
     label: {
-        display: "block",
-        fontSize: "13px",
-        marginBottom: "4px",
-        color: "#555",
-        fontWeight: "500"
+        fontSize: "10px",
+        color: "rgba(232, 240, 234, 0.4)", 
+        letterSpacing: "1px",
+        textTransform: "uppercase",
+        marginBottom: "6px",
+        fontWeight: "600"
     },
     input: {
         width: "100%",
-        padding: "10px",
+        padding: "10px 12px",
         borderRadius: "8px",
-        border: "1px solid #ccc",
+        border: "0.5px solid rgba(255, 255, 255, 0.1)",
         fontSize: "14px",
         boxSizing: "border-box",
-        backgroundColor: "#fff"
+        backgroundColor: "rgba(255, 255, 255, 0.06)", 
+        color: "#e8f0ea" 
     },
     buttonRow: {
         display: "flex",
         gap: "10px",
-        marginTop: "8px"
+        marginTop: "10px"
     },
     button: {
         flex: 1,
@@ -291,59 +291,17 @@ const styles = {
         borderRadius: "8px",
         fontSize: "15px",
         cursor: "pointer",
-        fontWeight: "500"
+        fontWeight: "600"
     },
     cancelButton: {
         flex: 1,
         padding: "12px",
-        backgroundColor: "#fff",
-        color: "#666",
-        border: "1px solid #ccc",
+        backgroundColor: "transparent",
+        color: "rgba(232, 240, 234, 0.6)",
+        border: "1px solid rgba(255,255,255,0.1)",
         borderRadius: "8px",
         fontSize: "15px",
-        cursor: "pointer",
-        fontWeight: "500"
-    },
-    duplicateWarning: {
-        backgroundColor: "#fff8e1",
-        border: "1px solid #ffe082",
-        borderRadius: "8px",
-        padding: "12px 16px",
-        marginBottom: "14px"
-    },
-    duplicateHeader: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "6px"
-    },
-    duplicateTitle: {
-        fontSize: "14px",
-        fontWeight: "600",
-        color: "#e65100"
-    },
-    dismissBtn: {
-        background: "none",
-        border: "none",
-        fontSize: "14px",
-        cursor: "pointer",
-        color: "#999",
-        padding: "0 4px"
-    },
-    duplicateList: {
-        margin: "0 0 6px",
-        paddingLeft: "20px"
-    },
-    duplicateItem: {
-        fontSize: "13px",
-        color: "#5d4037",
-        marginBottom: "2px"
-    },
-    duplicateHint: {
-        fontSize: "12px",
-        color: "#8d6e63",
-        margin: 0,
-        fontStyle: "italic"
+        cursor: "pointer"
     }
 }
 
