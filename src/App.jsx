@@ -6,6 +6,10 @@ import FilterBar from "./components/FilterBar"
 import InventoryList from "./components/InventoryList"
 import BakingTracker from "./components/BakingTracker"
 import BarcodeScanner from "./components/BarcodeScanner"
+import AuthForm from "./components/AuthForm"
+import UserMenu from "./components/UserMenu"
+import HouseholdManager from "./components/HouseholdManager"
+import InventoryToggle from "./components/InventoryToggle"
 
 function App() {
     const [items, setItems] = useState([])
@@ -16,8 +20,50 @@ function App() {
     const [isScanning, setIsScanning] = useState(false)
     const [timeTick, setTimeTick] = useState(Date.now())
 
+    const [session, setSession] = useState(null)
+    const [user, setUser] = useState(null)
+    const [profile, setProfile] = useState(null)
+    const [authLoading, setAuthLoading] = useState(true)
+
+    const [household, setHousehold] = useState(null)
+    const [householdMembers, setHouseholdMembers] = useState([])
+    const [showHouseholdManager, setShowHouseholdManager] = useState(false)
+    const [viewMode, setViewMode] = useState("personal")
+
     useEffect(() => {
-        fetchItems()
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session)
+            setUser(session?.user ?? null)
+            setAuthLoading(false)
+        })
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            (_event, session) => {
+                setSession(session)
+                setUser(session?.user ?? null)
+                if (!session) {
+                    setProfile(null)
+                    setHousehold(null)
+                    setHouseholdMembers([])
+                    setItems([])
+                }
+            }
+        )
+
+        return () => subscription.unsubscribe()
+    }, [])
+
+    useEffect(() => {
+        if (user) {
+            fetchProfile()
+            fetchHousehold()
+        }
+    }, [user])
+
+    useEffect(() => {
+        if (user) {
+            fetchItems()
+        }
 
         const channel = supabase
             .channel("realtime-inventory")
@@ -29,7 +75,7 @@ function App() {
                     table: "inventory_items"
                 },
                 () => {
-                    fetchItems()
+                    if (user) fetchItems()
                 }
             )
             .subscribe()
@@ -37,7 +83,7 @@ function App() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [])
+    }, [user, viewMode, household])
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -46,14 +92,80 @@ function App() {
         return () => clearInterval(timer)
     }, [])
 
-    async function fetchItems() {
+    async function fetchProfile() {
+        if (!user) return
+
         const { data, error } = await supabase
-            .from("inventory_items")
+            .from("profiles")
             .select("*")
+            .eq("id", user.id)
+            .single()
+
+        if (!error && data) {
+            setProfile(data)
+        }
+    }
+
+    async function fetchHousehold() {
+        if (!user) return
+
+        const { data: memberData, error: memberError } = await supabase
+            .from("household_members")
+            .select("household_id")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle()
+
+        if (memberError || !memberData) {
+            setHousehold(null)
+            setHouseholdMembers([])
+            return
+        }
+
+        const { data: householdData, error: householdError } = await supabase
+            .from("households")
+            .select("*")
+            .eq("id", memberData.household_id)
+            .single()
+
+        if (!householdError && householdData) {
+            setHousehold(householdData)
+
+            const { data: members } = await supabase
+                .from("household_members")
+                .select("*, profiles(username)")
+                .eq("household_id", householdData.id)
+
+            setHouseholdMembers(members || [])
+        }
+    }
+
+    async function fetchItems() {
+        if (!user) return
+
+        let query = supabase
+            .from("inventory_items")
+            .select("*, profiles(username)")
             .order("updated_at", { ascending: false })
 
+        if (viewMode === "personal") {
+            query = query.eq("user_id", user.id)
+        } else if (viewMode === "household" && household) {
+            const memberIds = householdMembers.map(m => m.user_id)
+            if (memberIds.length > 0) {
+                query = query.in("user_id", memberIds)
+            } else {
+                query = query.eq("user_id", user.id)
+            }
+        } else {
+            query = query.eq("user_id", user.id)
+        }
+
+        const { data, error } = await query
+
         if (error || !data || data.length === 0) {
-            const localData = JSON.parse(localStorage.getItem("grub_guide_backup") || "[]")
+            const localKey = `grub_guide_backup_${user.id}`
+            const localData = JSON.parse(localStorage.getItem(localKey) || "[]")
             setItems(localData)
         } else {
             setItems(data)
@@ -66,12 +178,15 @@ function App() {
             id: Math.random().toString(36).substr(2, 9),
             created_at: new Date().toISOString(),
             last_used_at: new Date().toISOString(),
-            times_used: 0
+            times_used: 0,
+            user_id: user?.id
         }
 
         const newItemsList = [itemWithMeta, ...items]
         setItems(newItemsList)
-        localStorage.setItem("grub_guide_backup", JSON.stringify(newItemsList))
+        
+        const localKey = user ? `grub_guide_backup_${user.id}` : "grub_guide_backup"
+        localStorage.setItem(localKey, JSON.stringify(newItemsList))
 
         await supabase.from("inventory_items").insert([itemWithMeta])
     }
@@ -91,7 +206,9 @@ function App() {
     async function handleDelete(id) {
         const updatedItems = items.filter((item) => item.id !== id)
         setItems(updatedItems)
-        localStorage.setItem("grub_guide_backup", JSON.stringify(updatedItems))
+        
+        const localKey = user ? `grub_guide_backup_${user.id}` : "grub_guide_backup"
+        localStorage.setItem(localKey, JSON.stringify(updatedItems))
 
         const { error } = await supabase
             .from("inventory_items")
@@ -223,6 +340,18 @@ function App() {
         return ids
     }, [items, timeTick])
 
+    if (authLoading) {
+        return (
+            <div style={styles.loadingContainer}>
+                <div style={styles.loadingText}>Loading...</div>
+            </div>
+        )
+    }
+
+    if (!session) {
+        return <AuthForm onAuthSuccess={() => {}} />
+    }
+
     return (
         <div style={styles.page}>
             <div style={styles.header}>
@@ -238,8 +367,26 @@ function App() {
                     >
                         Kroger Calculator
                     </a>
+                    <UserMenu
+                        user={user}
+                        profile={profile}
+                        onOpenHousehold={() => setShowHouseholdManager(true)}
+                    />
                 </div>
             </div>
+
+            {showHouseholdManager && (
+                <HouseholdManager
+                    user={user}
+                    household={household}
+                    members={householdMembers}
+                    onClose={() => setShowHouseholdManager(false)}
+                    onHouseholdChange={() => {
+                        fetchHousehold()
+                        setShowHouseholdManager(false)
+                    }}
+                />
+            )}
 
             <div style={styles.body}>
                 <div style={styles.toolsRow}>
@@ -282,6 +429,12 @@ function App() {
                     onLocationChange={setLocationFilter}
                 />
 
+                <InventoryToggle
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                    hasHousehold={!!household}
+                />
+
                 <div style={styles.listContainer}>
                     <div style={styles.listHeader}>
                         <div style={styles.listTitle}>Pantry</div>
@@ -305,6 +458,17 @@ function App() {
 }
 
 const styles = {
+    loadingContainer: {
+        minHeight: "100vh",
+        backgroundColor: "#0f1a14",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+    },
+    loadingText: {
+        color: "rgba(232,240,234,0.5)",
+        fontSize: "14px"
+    },
     page: {
         minHeight: "100vh",
         backgroundColor: "#0f1a14",
