@@ -4,8 +4,8 @@ import AddItemForm from "./components/AddItemForm"
 import SearchBar from "./components/SearchBar"
 import FilterBar from "./components/FilterBar"
 import InventoryList from "./components/InventoryList"
-
 import BakingTracker from "./components/BakingTracker"
+import BarcodeScanner from "./components/BarcodeScanner"
 
 function App() {
     const [items, setItems] = useState([])
@@ -13,6 +13,7 @@ function App() {
     const [categoryFilter, setCategoryFilter] = useState("")
     const [locationFilter, setLocationFilter] = useState("")
     const [editingItem, setEditingItem] = useState(null)
+    const [isScanning, setIsScanning] = useState(false)
     const [timeTick, setTimeTick] = useState(Date.now())
 
     useEffect(() => {
@@ -42,44 +43,38 @@ function App() {
         const timer = setInterval(() => {
             setTimeTick(Date.now())
         }, 30000)
-
         return () => clearInterval(timer)
     }, [])
 
-    // 1. Update fetchItems to check local storage if database is empty
-async function fetchItems() {
-    const { data, error } = await supabase
-        .from("inventory_items")
-        .select("*")
-        .order("updated_at", { ascending: false });
+    async function fetchItems() {
+        const { data, error } = await supabase
+            .from("inventory_items")
+            .select("*")
+            .order("updated_at", { ascending: false })
 
-    if (error || !data || data.length === 0) {
-        console.warn("Database unavailable, loading from local storage...");
-        const localData = JSON.parse(localStorage.getItem("grub_guide_backup") || "[]");
-        setItems(localData);
-    } else {
-        setItems(data);
+        if (error || !data || data.length === 0) {
+            const localData = JSON.parse(localStorage.getItem("grub_guide_backup") || "[]")
+            setItems(localData)
+        } else {
+            setItems(data)
+        }
     }
-}
 
+    async function handleAddItem(newItem) {
+        const itemWithMeta = {
+            ...newItem,
+            id: Math.random().toString(36).substr(2, 9),
+            created_at: new Date().toISOString(),
+            last_used_at: new Date().toISOString(),
+            times_used: 0
+        }
 
-async function handleAddItem(newItem) {
-    const itemWithMeta = { 
-        ...newItem, 
-        id: Math.random().toString(36).substr(2, 9),
-        created_at: new Date().toISOString() 
-    };
+        const newItemsList = [itemWithMeta, ...items]
+        setItems(newItemsList)
+        localStorage.setItem("grub_guide_backup", JSON.stringify(newItemsList))
 
-    
-    const newItemsList = [itemWithMeta, ...items];
-    setItems(newItemsList);
-
-    
-    localStorage.setItem("grub_guide_backup", JSON.stringify(newItemsList));
-
-
-    await supabase.from("inventory_items").insert([newItem]);
-}
+        await supabase.from("inventory_items").insert([itemWithMeta])
+    }
 
     async function handleUpdateItem(id, updatedFields) {
         const { error } = await supabase
@@ -94,37 +89,108 @@ async function handleAddItem(newItem) {
     }
 
     async function handleDelete(id) {
-    const updatedItems = items.filter(item => item.id !== id);
-    setItems(updatedItems);
-    localStorage.setItem("grub_guide_backup", JSON.stringify(updatedItems));
-    const { error } = await supabase
-        .from("inventory_items")
-        .delete()
-        .eq("id", id);
+        const updatedItems = items.filter((item) => item.id !== id)
+        setItems(updatedItems)
+        localStorage.setItem("grub_guide_backup", JSON.stringify(updatedItems))
 
-    if (error) {
-        console.warn("Database sync failed, but item removed locally for demo.");
+        const { error } = await supabase
+            .from("inventory_items")
+            .delete()
+            .eq("id", id)
+
+        if (error) {
+            console.warn("Database sync failed, but item removed locally.")
+        }
     }
-}
 
     function handleEdit(item) {
         setEditingItem(item)
     }
+
+    function handleAddToShoppingList(item) {
+        const list = JSON.parse(localStorage.getItem("grub_guide_shopping_list") || "[]")
+        localStorage.setItem("grub_guide_shopping_list", JSON.stringify([item, ...list]))
+        alert(`${item.item_name} added to shopping list`)
+    }
+
+    function handleReceiptUpload() {
+        alert("Simulating receipt scan...")
+        setTimeout(() => {
+            handleAddItem({
+                item_name: "Kroger Large Eggs (12ct)",
+                category: "Dairy",
+                location: "Fridge",
+                shelf_life: 21,
+                brand_name: "Kroger"
+            })
+            alert("Receipt processed: Kroger Large Eggs")
+        }, 1200)
+    }
+
+    async function handleBarcodeScan(decodedText) {
+        if (!isScanning) return
+        setIsScanning(false)
+
+        const cleanCode = decodedText.trim()
+
+        try {
+            const { data: sbData } = await supabase
+                .from("inventory_master")
+                .select("*")
+                .like("gtin_upc", `%${cleanCode}`)
+                .maybeSingle()
+
+            if (sbData) {
+                handleAddItem({
+                    item_name: sbData.brand_name || "Unknown Product",
+                    brand_name: sbData.brand_name || "Generic",
+                    category: sbData.branded_food_category || "Pantry",
+                    shelf_life: sbData.Shelf_Life || 14,
+                    location: "Pantry"
+                })
+                return
+            }
+
+            const offResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${cleanCode}.json`)
+            const offData = await offResponse.json()
+
+            if (offData.status === 1) {
+                const p = offData.product
+                const fullName = p.brands ? `${p.brands} ${p.product_name}` : p.product_name
+                handleAddItem({
+                    item_name: fullName || "New Product",
+                    brand_name: p.brands || "Generic",
+                    category: p.categories?.split(",")[0] || "Pantry",
+                    shelf_life: 14,
+                    location: "Pantry"
+                })
+            } else {
+                alert(`Product ${cleanCode} not found. Add manually.`)
+            }
+        } catch (err) {
+            console.error("Barcode scanner error:", err)
+        }
+    }
+
+    const rarelyUsedItems = useMemo(() => {
+        return items.filter((item) => {
+            if (!item.last_used_at) return false
+            const lastUsed = new Date(item.last_used_at)
+            const daysSinceUse = (new Date() - lastUsed) / (1000 * 60 * 60 * 24)
+            return daysSinceUse > 14
+        })
+    }, [items])
 
     const filteredItems = useMemo(() => {
         let result = items
 
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase()
-            result = result.filter((item) =>
-                item.item_name.toLowerCase().includes(q)
-            )
+            result = result.filter((item) => item.item_name?.toLowerCase().includes(q))
         }
-
         if (categoryFilter) {
             result = result.filter((item) => item.category === categoryFilter)
         }
-
         if (locationFilter) {
             result = result.filter((item) => item.location === locationFilter)
         }
@@ -134,8 +200,8 @@ async function handleAddItem(newItem) {
 
     const duplicateItemIds = useMemo(() => {
         const TEN_MINUTES_MS = 10 * 60 * 1000
-        const now = timeTick
         const groupedByName = new Map()
+        const now = timeTick
 
         items.forEach((item) => {
             const key = (item.item_name || "").trim().toLowerCase()
@@ -145,16 +211,12 @@ async function handleAddItem(newItem) {
         })
 
         const ids = new Set()
-
         groupedByName.forEach((group) => {
             if (group.length < 2) return
-
             group.forEach((item) => {
                 const createdAtMs = new Date(item.created_at).getTime()
                 if (Number.isNaN(createdAtMs)) return
-                if (now - createdAtMs <= TEN_MINUTES_MS) {
-                    ids.add(item.id)
-                }
+                if (now - createdAtMs <= TEN_MINUTES_MS) ids.add(item.id)
             })
         })
 
@@ -164,12 +226,40 @@ async function handleAddItem(newItem) {
     return (
         <div style={styles.page}>
             <div style={styles.header}>
-                <div style={styles.headerTitle}>
+                <a href="/" style={styles.headerTitleLink}>
                     Grub<span style={styles.headerTitleAccent}>Guide</span>
+                </a>
+                <div style={styles.headerMeta}>
+                    <a
+                        href="https://kroger-calculator.onrender.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={styles.krogerTab}
+                    >
+                        Kroger Calculator
+                    </a>
                 </div>
-                <div style={styles.subtitle}>Shared Pantry</div>
             </div>
+
             <div style={styles.body}>
+                <div style={styles.toolsRow}>
+                    <button
+                        onClick={() => setIsScanning(!isScanning)}
+                        style={{ ...styles.toolBtn, ...(isScanning ? styles.toolBtnDanger : {}) }}
+                    >
+                        {isScanning ? "Close Scanner" : "Scan Barcode"}
+                    </button>
+                    <button onClick={handleReceiptUpload} style={styles.toolBtnSecondary}>
+                        Upload Receipt
+                    </button>
+                </div>
+
+                {isScanning && (
+                    <div style={styles.scannerWrap}>
+                        <BarcodeScanner onScanSuccess={handleBarcodeScan} />
+                    </div>
+                )}
+
                 <AddItemForm
                     onAddItem={handleAddItem}
                     editingItem={editingItem}
@@ -177,16 +267,21 @@ async function handleAddItem(newItem) {
                     onCancelEdit={() => setEditingItem(null)}
                     existingItems={items}
                 />
-                <SearchBar
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                />
+
+                {rarelyUsedItems.length > 0 && (
+                    <div style={styles.warningBox}>
+                        Review needed: {rarelyUsedItems.length} item(s) have not been used in over 2 weeks.
+                    </div>
+                )}
+
+                <SearchBar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
                 <FilterBar
                     categoryFilter={categoryFilter}
                     locationFilter={locationFilter}
                     onCategoryChange={setCategoryFilter}
                     onLocationChange={setLocationFilter}
                 />
+
                 <div style={styles.listContainer}>
                     <div style={styles.listHeader}>
                         <div style={styles.listTitle}>Pantry</div>
@@ -196,8 +291,13 @@ async function handleAddItem(newItem) {
                         items={filteredItems}
                         onDelete={handleDelete}
                         onEdit={handleEdit}
+                        onAddToList={handleAddToShoppingList}
                         duplicateItemIds={duplicateItemIds}
                     />
+                </div>
+
+                <div style={styles.bakingSection}>
+                    <BakingTracker supabaseItems={items} />
                 </div>
             </div>
         </div>
@@ -225,18 +325,82 @@ const styles = {
         color: "#a8d5b5",
         letterSpacing: "-0.3px"
     },
+    headerTitleLink: {
+        fontFamily: "'DM Serif Display', serif",
+        fontSize: "22px",
+        color: "#a8d5b5",
+        letterSpacing: "-0.3px",
+        textDecoration: "none"
+    },
     headerTitleAccent: {
         color: "#4caf78"
     },
-    subtitle: {
+    headerMeta: {
+        marginLeft: "auto",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px"
+    },
+    krogerTab: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        color: "rgba(168,213,181,0.5)",
+        padding: "0",
+        borderRadius: "0",
+        textDecoration: "none",
+        fontWeight: "600",
         fontSize: "11px",
         letterSpacing: "2px",
-        textTransform: "uppercase",
-        color: "rgba(168,213,181,0.5)",
-        marginLeft: "auto"
+        textTransform: "uppercase"
     },
     body: {
         padding: "24px"
+    },
+    toolsRow: {
+        display: "flex",
+        gap: "10px",
+        marginBottom: "14px"
+    },
+    toolBtn: {
+        flex: 1,
+        padding: "12px",
+        border: "0.5px solid rgba(76,175,120,0.35)",
+        backgroundColor: "rgba(76,175,120,0.14)",
+        color: "#9be1b7",
+        borderRadius: "8px",
+        fontWeight: "600",
+        cursor: "pointer"
+    },
+    toolBtnDanger: {
+        border: "0.5px solid rgba(232,132,90,0.35)",
+        backgroundColor: "rgba(232,132,90,0.16)",
+        color: "#e8845a"
+    },
+    toolBtnSecondary: {
+        flex: 1,
+        padding: "12px",
+        border: "0.5px solid rgba(127,177,220,0.35)",
+        backgroundColor: "rgba(127,177,220,0.14)",
+        color: "#b9d6ee",
+        borderRadius: "8px",
+        fontWeight: "600",
+        cursor: "pointer"
+    },
+    scannerWrap: {
+        borderRadius: "12px",
+        overflow: "hidden",
+        border: "0.5px solid rgba(76,175,120,0.35)",
+        marginBottom: "14px"
+    },
+    warningBox: {
+        marginBottom: "12px",
+        padding: "10px",
+        backgroundColor: "rgba(244,162,97,0.1)",
+        color: "#f4a261",
+        borderRadius: "8px",
+        border: "0.5px solid rgba(244,162,97,0.3)",
+        fontSize: "13px"
     },
     listContainer: {
         marginTop: "0"
@@ -261,17 +425,10 @@ const styles = {
         borderRadius: "20px",
         border: "0.5px solid rgba(76,175,120,0.3)"
     },
-    undoBtn: {
-        width: "100%",
-        padding: "10px",
-        marginBottom: "12px",
-        backgroundColor: "rgba(232,132,90,0.15)",
-        color: "#e8845a",
-        border: "0.5px solid rgba(232,132,90,0.3)",
-        borderRadius: "8px",
-        fontSize: "13px",
-        fontWeight: "500",
-        cursor: "pointer"
+    bakingSection: {
+        marginTop: "24px",
+        borderTop: "0.5px solid rgba(255,255,255,0.1)",
+        paddingTop: "20px"
     }
 }
 

@@ -5,15 +5,46 @@
 }
 
 body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: "DM Sans", sans-serif;
     background-color: #0f1a14;
     color: #e8f0ea;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
+    line-height: 1.5;
 }
 
-button, input, select {
-    font-family: 'DM Sans', sans-serif;
+#root {
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+button,
+input,
+select {
+    font-family: "DM Sans", sans-serif;
+}
+
+input,
+select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #e8f0ea;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+input::placeholder {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+input:focus,
+select:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #2d6a4f;
 }
 
 select {
@@ -25,17 +56,24 @@ select option {
     color: #e8f0ea;
 }
 
-input {
-    background: rgba(255,255,255,0.06);
-    border: 0.5px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: #e8f0ea;
-    font-size: 14px;
-    outline: none;
-    width: 100%;
+button {
+    cursor: pointer;
+    transition: opacity 0.2s ease;
 }
 
-input::placeholder {
-    color: rgba(255,255,255,0.2);
+button:hover {
+    opacity: 0.85;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0f1a14;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #2d6a4f;
+    border-radius: 10px;
 }

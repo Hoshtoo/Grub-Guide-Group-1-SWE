@@ -99,30 +99,140 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
 
     return (
         <div style={styles.container}>
-            <div style={styles.sectionLabel}>Add item</div>
-            <div style={styles.grid}>
-                <div style={styles.inputGroupFull}>
+            <h2 style={styles.title}>
+                {editingItem ? "Edit Item" : "Add Grocery Item"}
+            </h2>
+
+            <div style={styles.row}>
+                <div style={{ ...styles.inputGroup, flex: 2 }}>
                     <label style={styles.label}>Item Name *</label>
-                    <input style={styles.input} type="text" placeholder="e.g. Oat milk"
-                           value={itemName} onChange={(e) => setItemName(e.target.value)} />
+                    <input
+                        style={styles.input}
+                        type="text"
+                        placeholder="e.g. Milk"
+                        value={itemName}
+                        onChange={(e) => handleItemNameChange(e.target.value)}
+                    />
                 </div>
-                <div style={styles.inputGroup}>
-                    <label style={styles.label}>Quantity</label>
-                    <input style={styles.input} type="number" min="1"
-                           value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Qty</label>
+                    <input
+                        style={styles.input}
+                        type="number"
+                        min="1"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value)}
+                    />
                 </div>
-                <div style={styles.inputGroup}>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
                     <label style={styles.label}>Unit</label>
-                    <input style={styles.input} type="text" placeholder="cartons, oz..."
-                           value={unit} onChange={(e) => setUnit(e.target.value)} />
-                </div>
-                <div style={styles.inputGroup}>
-                    <label style={styles.label}>Expiration (optional)</label>
-                    <input style={styles.input} type="date"
-                           value={expirationDate} onChange={(e) => setExpirationDate(e.target.value)} />
+                    <input
+                        style={styles.input}
+                        type="text"
+                        placeholder="oz, lbs"
+                        value={unit}
+                        onChange={(e) => setUnit(e.target.value)}
+                    />
                 </div>
             </div>
-            <button style={styles.button} onClick={handleSubmit}>+ Add to Pantry</button>
+
+            {duplicates.length > 0 && !duplicateDismissed && !editingItem && (
+                <div style={styles.duplicateWarning}>
+                    <div style={styles.duplicateHeader}>
+                        <span style={styles.duplicateTitle}>
+                            &#x26A0; Already in stock
+                        </span>
+                        <button
+                            style={styles.dismissBtn}
+                            onClick={() => setDuplicateDismissed(true)}
+                            title="Dismiss"
+                        >
+                            &#x2715;
+                        </button>
+                    </div>
+                    <ul style={styles.duplicateList}>
+                        {duplicates.map((d) => (
+                            <li key={d.id} style={styles.duplicateItem}>
+                                <strong>{d.item_name}</strong>
+                                {" \u2014 "}
+                                {d.quantity}{d.unit ? ` ${d.unit}` : ""}
+                                {" in "}
+                                {d.location || "Pantry"}
+                                {d.household_tag ? ` (${d.household_tag})` : ""}
+                            </li>
+                        ))}
+                    </ul>
+                    <p style={styles.duplicateHint}>
+                        Consider updating the existing item instead of adding a duplicate.
+                    </p>
+                </div>
+            )}
+
+            <div style={styles.row}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Category</label>
+                    <select
+                        style={styles.input}
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                    >
+                        <option value="">Select category</option>
+                        {CATEGORIES.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Location</label>
+                    <select
+                        style={styles.input}
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                    >
+                        <option value="">Select location</option>
+                        {LOCATIONS.map((l) => (
+                            <option key={l} value={l}>{l}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            <div style={styles.row}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Household Tag (optional)</label>
+                    <input
+                        style={styles.input}
+                        type="text"
+                        placeholder="e.g. Apt 4B, The Smiths"
+                        value={householdTag}
+                        onChange={(e) => setHouseholdTag(e.target.value)}
+                    />
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>Expiration Date</label>
+                    <input
+                        style={styles.input}
+                        type="date"
+                        value={expirationDate}
+                        onChange={(e) => setExpirationDate(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            <div style={styles.buttonRow}>
+                <button style={styles.button} onClick={handleSubmit}>
+                    {editingItem ? "Save Changes" : "+ Add Item"}
+                </button>
+                {editingItem && (
+                    <button style={styles.cancelButton} onClick={handleCancel}>
+                        Cancel
+                    </button>
+                )}
+            </div>
         </div>
     )
 }
@@ -130,63 +240,115 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
 const styles = {
     container: {
         backgroundColor: "rgba(255,255,255,0.04)",
-        border: "0.5px solid rgba(255,255,255,0.08)",
         borderRadius: "14px",
         padding: "20px",
-        marginBottom: "24px"
+        maxWidth: "600px",
+        margin: "0 auto",
+        border: "0.5px solid rgba(255,255,255,0.08)"
     },
-    sectionLabel: {
+    title: {
         fontSize: "10px",
-        letterSpacing: "2.5px",
-        textTransform: "uppercase",
+        marginBottom: "14px",
         color: "rgba(255,255,255,0.3)",
-        marginBottom: "14px"
+        textTransform: "uppercase",
+        letterSpacing: "2.5px",
+        margin: "0 0 16px"
     },
-    grid: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
+    row: {
+        display: "flex",
         gap: "12px",
-        marginBottom: "12px"
+        marginBottom: "14px"
     },
     inputGroup: {
         display: "flex",
         flexDirection: "column"
     },
-    inputGroupFull: {
-        display: "flex",
-        flexDirection: "column",
-        gridColumn: "1 / -1"
-    },
     label: {
+        display: "block",
         fontSize: "10px",
+        marginBottom: "6px",
         color: "rgba(255,255,255,0.35)",
-        letterSpacing: "1px",
+        fontWeight: "500",
         textTransform: "uppercase",
-        marginBottom: "6px"
+        letterSpacing: "1px"
     },
     input: {
         width: "100%",
-        background: "rgba(255,255,255,0.06)",
-        border: "0.5px solid rgba(255,255,255,0.1)",
-        borderRadius: "8px",
         padding: "10px 12px",
-        color: "#e8f0ea",
+        borderRadius: "8px",
+        border: "0.5px solid rgba(255,255,255,0.12)",
         fontSize: "14px",
         boxSizing: "border-box",
-        outline: "none"
+        backgroundColor: "rgba(255,255,255,0.06)",
+        color: "#e8f0ea"
+    },
+    buttonRow: {
+        display: "flex",
+        gap: "10px",
+        marginTop: "8px"
     },
     button: {
-        width: "100%",
+        flex: 1,
         padding: "12px",
         backgroundColor: "#4caf78",
         color: "#0f1a14",
         border: "none",
         borderRadius: "8px",
+        fontSize: "15px",
+        cursor: "pointer",
+        fontWeight: "600"
+    },
+    cancelButton: {
+        flex: 1,
+        padding: "12px",
+        backgroundColor: "rgba(255,255,255,0.06)",
+        color: "rgba(232,240,234,0.7)",
+        border: "0.5px solid rgba(255,255,255,0.12)",
+        borderRadius: "8px",
+        fontSize: "15px",
+        cursor: "pointer",
+        fontWeight: "500"
+    },
+    duplicateWarning: {
+        backgroundColor: "rgba(232,132,90,0.12)",
+        border: "0.5px solid rgba(232,132,90,0.3)",
+        borderRadius: "8px",
+        padding: "12px 16px",
+        marginBottom: "14px"
+    },
+    duplicateHeader: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: "6px"
+    },
+    duplicateTitle: {
         fontSize: "14px",
         fontWeight: "600",
+        color: "#f1a16d"
+    },
+    dismissBtn: {
+        background: "none",
+        border: "none",
+        fontSize: "14px",
         cursor: "pointer",
-        marginTop: "4px",
-        letterSpacing: "0.3px"
+        color: "rgba(232,240,234,0.55)",
+        padding: "0 4px"
+    },
+    duplicateList: {
+        margin: "0 0 6px",
+        paddingLeft: "20px"
+    },
+    duplicateItem: {
+        fontSize: "13px",
+        color: "rgba(232,240,234,0.86)",
+        marginBottom: "2px"
+    },
+    duplicateHint: {
+        fontSize: "12px",
+        color: "rgba(232,240,234,0.58)",
+        margin: 0,
+        fontStyle: "italic"
     }
 }
 

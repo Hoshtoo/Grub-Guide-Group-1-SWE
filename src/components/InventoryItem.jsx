@@ -1,4 +1,4 @@
-function InventoryItem({ item, onDelete, onEdit, isDuplicate = false }) {
+function InventoryItem({ item, onDelete, onEdit, onAddToList, isDuplicate = false }) {
     const locationLabel = item.location || "Pantry"
 
     const isNew = () => {
@@ -7,6 +7,10 @@ function InventoryItem({ item, onDelete, onEdit, isDuplicate = false }) {
         const diffHours = (now - createdAt) / 1000 / 60 / 60
         return diffHours < 12
     }
+
+    const lastUpdate = new Date(item.last_used_at || item.created_at || new Date())
+    const diffDays = Math.ceil(Math.abs(new Date() - lastUpdate) / (1000 * 60 * 60 * 24))
+    const needsVerification = diffDays > 7
 
     return (
         <div style={{ ...styles.card, ...(isNew() ? styles.newCard : {}) }}>
@@ -19,22 +23,21 @@ function InventoryItem({ item, onDelete, onEdit, isDuplicate = false }) {
                 <div style={styles.nameRow}>
                     <span style={styles.name}>{item.item_name}</span>
                     <span style={styles.qty}>
-                        {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+                        {item.quantity}
+                        {item.unit ? ` ${item.unit}` : ""}
                     </span>
                 </div>
+
                 <div style={styles.actions}>
-                    <button
-                        style={styles.editBtn}
-                        onClick={() => onEdit(item)}
-                        title="Edit item"
-                    >
+                    {onAddToList && (
+                        <button style={styles.listBtn} onClick={() => onAddToList(item)} title="Add to shopping list">
+                            &#128722;
+                        </button>
+                    )}
+                    <button style={styles.editBtn} onClick={() => onEdit(item)} title="Edit item">
                         &#9998;
                     </button>
-                    <button
-                        style={styles.deleteBtn}
-                        onClick={() => onDelete(item.id)}
-                        title="Delete item"
-                    >
+                    <button style={styles.deleteBtn} onClick={() => onDelete(item.id)} title="Delete item">
                         &#128465;
                     </button>
                 </div>
@@ -42,15 +45,15 @@ function InventoryItem({ item, onDelete, onEdit, isDuplicate = false }) {
 
             <div style={styles.metaRow}>
                 <span style={styles.locationBadge}>{locationLabel}</span>
-                {item.household_tag && (
-                    <span style={styles.householdBadge}>
-                        {item.household_tag}
-                    </span>
-                )}
-                {item.expiration_date && (
-                    <span style={styles.expiry}>
-                        Exp: {item.expiration_date}
-                    </span>
+                {item.household_tag && <span style={styles.householdBadge}>{item.household_tag}</span>}
+                {item.expiration_date && <span style={styles.expiry}>Exp: {item.expiration_date}</span>}
+                {needsVerification && (
+                    <button
+                        onClick={() => alert(`Please verify amount of ${item.item_name}. It has been ${diffDays} days since update.`)}
+                        style={styles.verifyBtn}
+                    >
+                        Verify
+                    </button>
                 )}
             </div>
         </div>
@@ -72,6 +75,11 @@ const styles = {
         backgroundColor: "rgba(76,175,120,0.14)",
         border: "0.5px solid rgba(76,175,120,0.5)"
     },
+    badgesRow: {
+        display: "flex",
+        gap: "6px",
+        flexWrap: "wrap"
+    },
     newBadge: {
         display: "inline-block",
         backgroundColor: "rgba(76,175,120,0.2)",
@@ -80,11 +88,6 @@ const styles = {
         padding: "2px 8px",
         borderRadius: "10px",
         lineHeight: 1.2
-    },
-    badgesRow: {
-        display: "flex",
-        gap: "6px",
-        flexWrap: "wrap"
     },
     duplicateBadge: {
         display: "inline-block",
@@ -122,6 +125,15 @@ const styles = {
         display: "flex",
         gap: "4px",
         flexShrink: 0
+    },
+    listBtn: {
+        background: "rgba(127,177,220,0.14)",
+        border: "0.5px solid rgba(127,177,220,0.35)",
+        fontSize: "16px",
+        cursor: "pointer",
+        padding: "2px 6px",
+        borderRadius: "4px",
+        color: "#b9d6ee"
     },
     editBtn: {
         background: "rgba(76,175,120,0.14)",
@@ -168,6 +180,16 @@ const styles = {
         fontSize: "12px",
         color: "#f1a16d",
         fontWeight: "500"
+    },
+    verifyBtn: {
+        backgroundColor: "transparent",
+        color: "#f4a261",
+        border: "1px solid rgba(244,162,97,0.4)",
+        borderRadius: "6px",
+        padding: "2px 8px",
+        fontSize: "10px",
+        fontWeight: "bold",
+        cursor: "pointer"
     }
 }
 
