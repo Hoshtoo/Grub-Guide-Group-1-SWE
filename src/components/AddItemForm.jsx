@@ -239,17 +239,19 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
 
 const styles = {
     container: {
-        backgroundColor: "#fff",
-        borderRadius: "12px",
-        padding: "24px",
+        backgroundColor: "rgba(255,255,255,0.04)",
+        borderRadius: "14px",
+        padding: "20px",
         maxWidth: "600px",
         margin: "0 auto",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+        border: "0.5px solid rgba(255,255,255,0.08)"
     },
     title: {
-        fontSize: "20px",
-        marginBottom: "16px",
-        color: "#2d6a4f",
+        fontSize: "10px",
+        marginBottom: "14px",
+        color: "rgba(255,255,255,0.3)",
+        textTransform: "uppercase",
+        letterSpacing: "2.5px",
         margin: "0 0 16px"
     },
     row: {
@@ -263,19 +265,22 @@ const styles = {
     },
     label: {
         display: "block",
-        fontSize: "13px",
-        marginBottom: "4px",
-        color: "#555",
-        fontWeight: "500"
+        fontSize: "10px",
+        marginBottom: "6px",
+        color: "rgba(255,255,255,0.35)",
+        fontWeight: "500",
+        textTransform: "uppercase",
+        letterSpacing: "1px"
     },
     input: {
         width: "100%",
-        padding: "10px",
+        padding: "10px 12px",
         borderRadius: "8px",
-        border: "1px solid #ccc",
+        border: "0.5px solid rgba(255,255,255,0.12)",
         fontSize: "14px",
         boxSizing: "border-box",
-        backgroundColor: "#fff"
+        backgroundColor: "rgba(255,255,255,0.06)",
+        color: "#e8f0ea"
     },
     buttonRow: {
         display: "flex",
@@ -285,28 +290,28 @@ const styles = {
     button: {
         flex: 1,
         padding: "12px",
-        backgroundColor: "#2d6a4f",
-        color: "white",
+        backgroundColor: "#4caf78",
+        color: "#0f1a14",
         border: "none",
         borderRadius: "8px",
         fontSize: "15px",
         cursor: "pointer",
-        fontWeight: "500"
+        fontWeight: "600"
     },
     cancelButton: {
         flex: 1,
         padding: "12px",
-        backgroundColor: "#fff",
-        color: "#666",
-        border: "1px solid #ccc",
+        backgroundColor: "rgba(255,255,255,0.06)",
+        color: "rgba(232,240,234,0.7)",
+        border: "0.5px solid rgba(255,255,255,0.12)",
         borderRadius: "8px",
         fontSize: "15px",
         cursor: "pointer",
         fontWeight: "500"
     },
     duplicateWarning: {
-        backgroundColor: "#fff8e1",
-        border: "1px solid #ffe082",
+        backgroundColor: "rgba(232,132,90,0.12)",
+        border: "0.5px solid rgba(232,132,90,0.3)",
         borderRadius: "8px",
         padding: "12px 16px",
         marginBottom: "14px"
@@ -320,14 +325,14 @@ const styles = {
     duplicateTitle: {
         fontSize: "14px",
         fontWeight: "600",
-        color: "#e65100"
+        color: "#f1a16d"
     },
     dismissBtn: {
         background: "none",
         border: "none",
         fontSize: "14px",
         cursor: "pointer",
-        color: "#999",
+        color: "rgba(232,240,234,0.55)",
         padding: "0 4px"
     },
     duplicateList: {
@@ -336,12 +341,12 @@ const styles = {
     },
     duplicateItem: {
         fontSize: "13px",
-        color: "#5d4037",
+        color: "rgba(232,240,234,0.86)",
         marginBottom: "2px"
     },
     duplicateHint: {
         fontSize: "12px",
-        color: "#8d6e63",
+        color: "rgba(232,240,234,0.58)",
         margin: 0,
         fontStyle: "italic"
     }

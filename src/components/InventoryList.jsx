@@ -18,9 +18,7 @@ function groupByCategory(items) {
 
     items.forEach((item) => {
         const cat = item.category || "Other"
-        if (!groups[cat]) {
-            groups[cat] = []
-        }
+        if (!groups[cat]) groups[cat] = []
         groups[cat].push(item)
     })
 
@@ -29,22 +27,18 @@ function groupByCategory(items) {
         .map((cat) => [cat, groups[cat]])
 
     Object.keys(groups).forEach((cat) => {
-        if (!CATEGORY_ORDER.includes(cat)) {
-            sortedEntries.push([cat, groups[cat]])
-        }
+        if (!CATEGORY_ORDER.includes(cat)) sortedEntries.push([cat, groups[cat]])
     })
 
     return sortedEntries
 }
 
-function InventoryList({ items, onDelete, onEdit }) {
+function InventoryList({ items, onDelete, onEdit, onAddToList, duplicateItemIds = new Set() }) {
     if (items.length === 0) {
         return (
             <div style={styles.empty}>
                 <p style={styles.emptyText}>No items found</p>
-                <p style={styles.emptySubtext}>
-                    Add items above or adjust your search and filters
-                </p>
+                <p style={styles.emptySubtext}>Add items above or adjust search and filters</p>
             </div>
         )
     }
@@ -55,7 +49,7 @@ function InventoryList({ items, onDelete, onEdit }) {
         <div style={styles.container}>
             <div style={styles.countBar}>
                 <span style={styles.countText}>
-                    {items.length} item{items.length !== 1 ? "s" : ""} in inventory
+                    {items.length} item{items.length !== 1 ? "s" : ""} in stock
                 </span>
             </div>
 
@@ -63,9 +57,7 @@ function InventoryList({ items, onDelete, onEdit }) {
                 <div key={category} style={styles.categoryGroup}>
                     <div style={styles.categoryHeader}>
                         <span style={styles.categoryName}>{category}</span>
-                        <span style={styles.categoryCount}>
-                            {categoryItems.length}
-                        </span>
+                        <span style={styles.categoryCount}>{categoryItems.length}</span>
                     </div>
 
                     {categoryItems.map((item) => (
@@ -74,6 +66,8 @@ function InventoryList({ items, onDelete, onEdit }) {
                             item={item}
                             onDelete={onDelete}
                             onEdit={onEdit}
+                            onAddToList={onAddToList}
+                            isDuplicate={duplicateItemIds.has(item.id)}
                         />
                     ))}
                 </div>
@@ -90,50 +84,52 @@ const styles = {
     },
     countBar: {
         textAlign: "right",
-        marginBottom: "4px"
+        marginBottom: "8px"
     },
     countText: {
-        fontSize: "13px",
-        color: "#888"
+        fontSize: "12px",
+        color: "rgba(232,240,234,0.4)",
+        textTransform: "uppercase",
+        letterSpacing: "1px"
     },
     categoryGroup: {
-        marginBottom: "16px"
+        marginBottom: "20px"
     },
     categoryHeader: {
         display: "flex",
         alignItems: "center",
-        gap: "8px",
-        padding: "6px 4px",
-        borderBottom: "2px solid #b7e4c7",
-        marginBottom: "8px"
+        gap: "10px",
+        padding: "8px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.1)",
+        marginBottom: "12px"
     },
     categoryName: {
-        fontSize: "14px",
-        fontWeight: "600",
-        color: "#2d6a4f",
+        fontSize: "13px",
+        fontWeight: "700",
+        color: "#52b788",
         textTransform: "uppercase",
-        letterSpacing: "0.5px"
+        letterSpacing: "1.5px"
     },
     categoryCount: {
-        fontSize: "12px",
-        color: "#52796f",
-        backgroundColor: "#d8f3dc",
-        padding: "1px 8px",
-        borderRadius: "10px",
-        fontWeight: "500"
+        fontSize: "10px",
+        color: "#e8f0ea",
+        backgroundColor: "rgba(255,255,255,0.05)",
+        padding: "2px 8px",
+        borderRadius: "4px",
+        fontWeight: "600"
     },
     empty: {
         textAlign: "center",
-        padding: "40px 20px"
+        padding: "60px 20px"
     },
     emptyText: {
         fontSize: "16px",
-        color: "#888",
-        margin: "0 0 4px"
+        color: "rgba(232,240,234,0.6)",
+        margin: "0 0 8px"
     },
     emptySubtext: {
         fontSize: "13px",
-        color: "#aaa",
+        color: "rgba(232,240,234,0.3)",
         margin: 0
     }
 }

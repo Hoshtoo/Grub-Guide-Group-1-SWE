@@ -1,56 +1,59 @@
-const LOCATION_ICONS = {
-    Fridge: "&#x1F9CA;",
-    Freezer: "&#x2744;&#xFE0F;",
-    Pantry: "&#x1F3E0;",
-    Counter: "&#x1F372;"
-}
-
-function InventoryItem({ item, onDelete, onEdit }) {
+function InventoryItem({ item, onDelete, onEdit, onAddToList, isDuplicate = false }) {
     const locationLabel = item.location || "Pantry"
 
+    const isNew = () => {
+        const createdAt = new Date(item.created_at)
+        const now = new Date()
+        const diffHours = (now - createdAt) / 1000 / 60 / 60
+        return diffHours < 12
+    }
+
+    const lastUpdate = new Date(item.last_used_at || item.created_at || new Date())
+    const diffDays = Math.ceil(Math.abs(new Date() - lastUpdate) / (1000 * 60 * 60 * 24))
+    const needsVerification = diffDays > 7
+
     return (
-        <div style={styles.card}>
+        <div style={{ ...styles.card, ...(isNew() ? styles.newCard : {}) }}>
+            <div style={styles.badgesRow}>
+                {isNew() && <span style={styles.newBadge}>Just Added</span>}
+                {isDuplicate && <span style={styles.duplicateBadge}>Duplicate</span>}
+            </div>
+
             <div style={styles.topRow}>
                 <div style={styles.nameRow}>
                     <span style={styles.name}>{item.item_name}</span>
                     <span style={styles.qty}>
-                        {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+                        {item.quantity}
+                        {item.unit ? ` ${item.unit}` : ""}
                     </span>
                 </div>
+
                 <div style={styles.actions}>
-                    <button
-                        style={styles.editBtn}
-                        onClick={() => onEdit(item)}
-                        title="Edit item"
-                    >
+                    {onAddToList && (
+                        <button style={styles.listBtn} onClick={() => onAddToList(item)} title="Add to shopping list">
+                            &#128722;
+                        </button>
+                    )}
+                    <button style={styles.editBtn} onClick={() => onEdit(item)} title="Edit item">
                         &#9998;
                     </button>
-                    <button
-                        style={styles.deleteBtn}
-                        onClick={() => onDelete(item.id)}
-                        title="Delete item"
-                    >
+                    <button style={styles.deleteBtn} onClick={() => onDelete(item.id)} title="Delete item">
                         &#128465;
                     </button>
                 </div>
             </div>
 
             <div style={styles.metaRow}>
-                <span
-                    style={styles.locationBadge}
-                    dangerouslySetInnerHTML={{
-                        __html: `${LOCATION_ICONS[locationLabel] || ""} ${locationLabel}`
-                    }}
-                />
-                {item.household_tag && (
-                    <span style={styles.householdBadge}>
-                        {item.household_tag}
-                    </span>
-                )}
-                {item.expiration_date && (
-                    <span style={styles.expiry}>
-                        Exp: {item.expiration_date}
-                    </span>
+                <span style={styles.locationBadge}>{locationLabel}</span>
+                {item.household_tag && <span style={styles.householdBadge}>{item.household_tag}</span>}
+                {item.expiration_date && <span style={styles.expiry}>Exp: {item.expiration_date}</span>}
+                {needsVerification && (
+                    <button
+                        onClick={() => alert(`Please verify amount of ${item.item_name}. It has been ${diffDays} days since update.`)}
+                        style={styles.verifyBtn}
+                    >
+                        Verify
+                    </button>
                 )}
             </div>
         </div>
@@ -59,10 +62,41 @@ function InventoryItem({ item, onDelete, onEdit }) {
 
 const styles = {
     card: {
-        backgroundColor: "#f4f9f6",
+        backgroundColor: "rgba(255,255,255,0.05)",
         borderRadius: "10px",
         padding: "12px 16px",
-        marginBottom: "8px"
+        marginBottom: "8px",
+        border: "0.5px solid rgba(255,255,255,0.08)",
+        display: "flex",
+        flexDirection: "column",
+        rowGap: "6px"
+    },
+    newCard: {
+        backgroundColor: "rgba(76,175,120,0.14)",
+        border: "0.5px solid rgba(76,175,120,0.5)"
+    },
+    badgesRow: {
+        display: "flex",
+        gap: "6px",
+        flexWrap: "wrap"
+    },
+    newBadge: {
+        display: "inline-block",
+        backgroundColor: "rgba(76,175,120,0.2)",
+        color: "#9be1b7",
+        fontSize: "11px",
+        padding: "2px 8px",
+        borderRadius: "10px",
+        lineHeight: 1.2
+    },
+    duplicateBadge: {
+        display: "inline-block",
+        backgroundColor: "rgba(232,132,90,0.18)",
+        color: "#f4b08c",
+        fontSize: "11px",
+        padding: "2px 8px",
+        borderRadius: "10px",
+        lineHeight: 1.2
     },
     topRow: {
         display: "flex",
@@ -78,12 +112,12 @@ const styles = {
     name: {
         fontWeight: "bold",
         fontSize: "15px",
-        color: "#1b4332"
+        color: "#e8f0ea"
     },
     qty: {
         fontSize: "13px",
-        color: "#555",
-        backgroundColor: "#e8f0eb",
+        color: "rgba(232,240,234,0.78)",
+        backgroundColor: "rgba(255,255,255,0.08)",
         padding: "2px 8px",
         borderRadius: "6px"
     },
@@ -92,50 +126,70 @@ const styles = {
         gap: "4px",
         flexShrink: 0
     },
-    editBtn: {
-        background: "none",
-        border: "none",
+    listBtn: {
+        background: "rgba(127,177,220,0.14)",
+        border: "0.5px solid rgba(127,177,220,0.35)",
         fontSize: "16px",
         cursor: "pointer",
         padding: "2px 6px",
         borderRadius: "4px",
-        color: "#2d6a4f"
+        color: "#b9d6ee"
+    },
+    editBtn: {
+        background: "rgba(76,175,120,0.14)",
+        border: "0.5px solid rgba(76,175,120,0.35)",
+        fontSize: "16px",
+        cursor: "pointer",
+        padding: "2px 6px",
+        borderRadius: "4px",
+        color: "#7fd59f"
     },
     deleteBtn: {
-        background: "none",
-        border: "none",
+        background: "rgba(232,132,90,0.14)",
+        border: "0.5px solid rgba(232,132,90,0.35)",
         fontSize: "16px",
         cursor: "pointer",
         padding: "2px 6px",
         borderRadius: "4px",
-        color: "#c0392b"
+        color: "#e8845a"
     },
     metaRow: {
         display: "flex",
         alignItems: "center",
         gap: "8px",
-        marginTop: "6px",
         flexWrap: "wrap"
     },
     locationBadge: {
         fontSize: "12px",
-        color: "#2d6a4f",
-        backgroundColor: "#d8f3dc",
+        color: "#8dd9aa",
+        backgroundColor: "rgba(76,175,120,0.14)",
         padding: "2px 8px",
         borderRadius: "6px",
-        fontWeight: "500"
+        fontWeight: "500",
+        border: "0.5px solid rgba(76,175,120,0.3)"
     },
     householdBadge: {
         fontSize: "12px",
-        color: "#5a4a8a",
-        backgroundColor: "#ede9f6",
+        color: "#c9b6f3",
+        backgroundColor: "rgba(138,108,198,0.18)",
         padding: "2px 8px",
-        borderRadius: "6px"
+        borderRadius: "6px",
+        border: "0.5px solid rgba(138,108,198,0.3)"
     },
     expiry: {
         fontSize: "12px",
-        color: "#e07b39",
+        color: "#f1a16d",
         fontWeight: "500"
+    },
+    verifyBtn: {
+        backgroundColor: "transparent",
+        color: "#f4a261",
+        border: "1px solid rgba(244,162,97,0.4)",
+        borderRadius: "6px",
+        padding: "2px 8px",
+        fontSize: "10px",
+        fontWeight: "bold",
+        cursor: "pointer"
     }
 }
 
