@@ -2,7 +2,7 @@
 
 **GrubGuide** helps you keep track of what is in your kitchen—alone or with the people you share a home with. Create an account, build your pantry list, and decide what everyone in your household can see versus what stays on your personal list.
 
-The app is built for real day-to-day use: quick search and filters, barcode scanning when you want to add something fast, and a small baking tracker alongside your inventory.
+The app is built for real day-to-day use: quick search and filters, and barcode scanning when you want to add something fast.
 
 ## What you can do
 
@@ -14,9 +14,6 @@ Create a household or join one with an invite code so roommates or family share 
 
 **Barcode scanner**  
 Use your device camera to scan a product barcode and add an item without typing the name by hand.
-
-**Baking tracker**  
-A lightweight helper next to the pantry for tracking bake-related amounts while you cook or plan.
 
 **Kroger calculator**  
 The header can open a separate **Kroger shopping calculator** (build a list, see progress toward spend goals). That tool is its own small app in this repo; GrubGuide stays the pantry hub.
