@@ -4,6 +4,7 @@ function InventoryToggle({ viewMode, onViewModeChange, hasHousehold }) {
     return (
         <div style={styles.container}>
             <button
+                type="button"
                 onClick={() => onViewModeChange("personal")}
                 style={{
                     ...styles.button,
@@ -13,6 +14,7 @@ function InventoryToggle({ viewMode, onViewModeChange, hasHousehold }) {
                 My Items
             </button>
             <button
+                type="button"
                 onClick={() => onViewModeChange("household")}
                 style={{
                     ...styles.button,

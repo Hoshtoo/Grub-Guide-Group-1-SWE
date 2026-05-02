@@ -2,15 +2,6 @@ import React from 'react';
 import FreshnessCard from './FreshnessCard';
 
 const BakingTracker = ({ supabaseItems = [] }) => {
-  // --- CORE LOGIC UNTOUCHED ---
-  const calculatePoissonRisk = (lambda_p, k) => {
-      if (lambda_p <= 0) return 0;
-      const e = Math.E;
-      const factorial = (n) => (n <= 1 ? 1 : n * factorial(n - 1));
-      const prob = (Math.pow(e, -lambda_p) * Math.pow(lambda_p, k)) / factorial(k);
-      return parseFloat((prob * 100).toFixed(2)); 
-  };
-
   const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   let totalConfidence = 0;
   let actionNeededCount = 0;
@@ -24,7 +15,6 @@ const BakingTracker = ({ supabaseItems = [] }) => {
     const stock = Number(item.quantity) || 1;
     const lambda = 1 / shelfLife;
     const degradationRisk = (1 - Math.pow(Math.E, -lambda * daysOld)) * 100;
-    const stockOutProb = usage > stock ? calculatePoissonRisk(usage, stock) : 0;
     const baseScore = 5 - Math.floor(degradationRisk / 20);
     const score = Math.max(1, Math.min(5, usage > stock ? baseScore - 1 : baseScore));
     distribution[score]++;
@@ -41,19 +31,25 @@ const BakingTracker = ({ supabaseItems = [] }) => {
       {/* UPDATED TITLE: DM Serif Style */}
       <h2 style={styles.header}>Baker's Freshness Analytics</h2>
 
-      {/* TOP STATS: Dark Module Style */}
+      {/* TOP STATS — matching columns, same height */}
       <div style={styles.statsRow}>
           <div style={styles.statCard}>
-              <span style={styles.statLabel}>Data Confidence</span>
-              <span style={{...styles.statValue, color: avgConfidence > 75 ? '#52b788' : '#f4a261'}}>
-                  {avgConfidence}%
-              </span>
+              <span style={styles.statLabel}>Data confidence</span>
+              <div style={styles.statFigure}>
+                  <span style={{ ...styles.statNumber, color: avgConfidence > 75 ? "#52b788" : "#f4a261" }}>
+                      {avgConfidence}
+                  </span>
+                  <span style={styles.statSuffix}>%</span>
+              </div>
           </div>
           <div style={styles.statCard}>
-              <span style={styles.statLabel}>Action Required</span>
-              <span style={{...styles.statValue, color: actionNeededCount > 0 ? '#e76f51' : '#52b788'}}>
-                  {actionNeededCount}
-              </span>
+              <span style={styles.statLabel}>Action required</span>
+              <div style={styles.statFigure}>
+                  <span style={{ ...styles.statNumber, color: actionNeededCount > 0 ? "#e76f51" : "#52b788" }}>
+                      {actionNeededCount}
+                  </span>
+                  <span style={styles.statSuffixMuted}>{actionNeededCount === 1 ? "item" : "items"}</span>
+              </div>
           </div>
       </div>
 
@@ -114,24 +110,64 @@ const styles = {
       borderBottom: '1px solid rgba(255,255,255,0.1)', 
       paddingBottom: '10px' 
     },
-    statsRow: { display: 'flex', gap: '12px', marginBottom: '18px' },
-    statCard: { 
-        flex: 1, 
-        backgroundColor: 'rgba(255,255,255,0.03)', 
-        padding: '16px', 
-        borderRadius: '12px', 
-        border: '0.5px solid rgba(255,255,255,0.08)', 
-        textAlign: 'center' 
+    statsRow: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "12px",
+        marginBottom: "20px",
+        alignItems: "stretch"
     },
-    statLabel: { 
-      fontSize: '10px', 
-      color: 'rgba(232, 240, 234, 0.4)', 
-      fontWeight: '600', 
-      textTransform: 'uppercase', 
-      letterSpacing: '1px', 
-      marginBottom: '6px' 
+    statCard: {
+        minHeight: "118px",
+        boxSizing: "border-box",
+        backgroundColor: "rgba(255,255,255,0.03)",
+        padding: "18px 14px",
+        borderRadius: "12px",
+        border: "0.5px solid rgba(255,255,255,0.08)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        gap: "12px"
     },
-    statValue: { fontSize: '24px', fontWeight: '800' },
+    statLabel: {
+        fontSize: "13px",
+        color: "rgba(232, 240, 234, 0.55)",
+        fontWeight: "600",
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        lineHeight: 1.3,
+        maxWidth: "100%"
+    },
+    statFigure: {
+        display: "inline-flex",
+        flexDirection: "row",
+        alignItems: "baseline",
+        justifyContent: "center",
+        gap: "4px",
+        fontVariantNumeric: "tabular-nums"
+    },
+    statNumber: {
+        fontSize: "30px",
+        fontWeight: "700",
+        letterSpacing: "-0.03em",
+        lineHeight: 1
+    },
+    statSuffix: {
+        fontSize: "15px",
+        fontWeight: "600",
+        color: "rgba(232, 240, 234, 0.5)",
+        marginLeft: "1px"
+    },
+    statSuffixMuted: {
+        fontSize: "13px",
+        fontWeight: "500",
+        color: "rgba(232, 240, 234, 0.42)",
+        textTransform: "lowercase",
+        letterSpacing: "0.03em",
+        marginLeft: "6px"
+    },
     dashboardCard: { 
       marginBottom: '28px', 
       padding: '20px', 

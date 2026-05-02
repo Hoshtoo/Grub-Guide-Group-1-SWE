@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "kroger:install": "npm install --prefix kroger-calculator",
+    "kroger:dev": "npm run dev --prefix kroger-calculator",
+    "kroger:build": "npm run build --prefix kroger-calculator"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",

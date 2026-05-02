@@ -11,6 +11,109 @@ import UserMenu from "./components/UserMenu"
 import HouseholdManager from "./components/HouseholdManager"
 import InventoryToggle from "./components/InventoryToggle"
 
+const KROGER_CALCULATOR_URL =
+    (import.meta.env.VITE_KROGER_CALCULATOR_URL && String(import.meta.env.VITE_KROGER_CALCULATOR_URL).trim()) ||
+    "https://kroger-calculator.onrender.com"
+
+/** PostgREST / schema cache: column not on this project's inventory_items table */
+const SCHEMA_UNKNOWN_COL_RE = /Could not find the '([^']+)' column/i
+
+/** Cached: does inventory_items have shared_with_household (required for private rows in Supabase + RLS). */
+let inventorySharedColumnProbe
+
+async function inventoryHasSharedWithHouseholdColumn() {
+    if (inventorySharedColumnProbe !== undefined) return inventorySharedColumnProbe
+    const { error } = await supabase
+        .from("inventory_items")
+        .select("shared_with_household")
+        .limit(1)
+        .maybeSingle()
+    if (!error) {
+        inventorySharedColumnProbe = true
+        return true
+    }
+    const msg = error.message || ""
+    if (/shared_with_household|Could not find the 'shared_with_household' column|schema cache/i.test(msg)) {
+        inventorySharedColumnProbe = false
+        return false
+    }
+    inventorySharedColumnProbe = true
+    return true
+}
+
+function resetInventorySharedColumnProbe() {
+    inventorySharedColumnProbe = undefined
+}
+
+/** When `shared_with_household` is missing on rows, split My Items vs Household using this set (per device). */
+function loadPrivacyItemIdSet(userId) {
+    if (!userId) return new Set()
+    try {
+        const raw = localStorage.getItem(`grub_guide_personal_item_ids_v1_${userId}`)
+        const arr = raw ? JSON.parse(raw) : []
+        return new Set((Array.isArray(arr) ? arr : []).map(String))
+    } catch {
+        return new Set()
+    }
+}
+
+function savePrivacyItemIdSet(userId, set) {
+    if (!userId) return
+    localStorage.setItem(`grub_guide_personal_item_ids_v1_${userId}`, JSON.stringify([...set]))
+}
+
+function markPrivacyItemPersonal(userId, itemId) {
+    const s = loadPrivacyItemIdSet(userId)
+    s.add(String(itemId))
+    savePrivacyItemIdSet(userId, s)
+}
+
+function markPrivacyItemShared(userId, itemId) {
+    const s = loadPrivacyItemIdSet(userId)
+    s.delete(String(itemId))
+    savePrivacyItemIdSet(userId, s)
+}
+
+async function insertInventoryRow(payloadIn) {
+    let p = { ...payloadIn }
+    let lastErr = null
+    for (let i = 0; i < 32; i++) {
+        const { error } = await supabase.from("inventory_items").insert([p])
+        if (!error) return { error: null, inserted: { ...p } }
+        lastErr = error
+        const msg = error.message || ""
+        const colMatch = msg.match(SCHEMA_UNKNOWN_COL_RE)
+        if (colMatch) {
+            delete p[colMatch[1]]
+            continue
+        }
+        if (/uuid|invalid input syntax/i.test(msg)) {
+            if (typeof crypto !== "undefined" && crypto.randomUUID) p.id = crypto.randomUUID()
+            continue
+        }
+        return { error, inserted: null }
+    }
+    return { error: lastErr, inserted: null }
+}
+
+async function updateInventoryRow(id, fieldsIn) {
+    let f = { ...fieldsIn }
+    let lastErr = null
+    for (let i = 0; i < 32; i++) {
+        const { error } = await supabase.from("inventory_items").update(f).eq("id", id)
+        if (!error) return { error: null }
+        lastErr = error
+        const msg = error.message || ""
+        const colMatch = msg.match(SCHEMA_UNKNOWN_COL_RE)
+        if (colMatch) {
+            delete f[colMatch[1]]
+            continue
+        }
+        return { error }
+    }
+    return { error: lastErr }
+}
+
 function App() {
     const [items, setItems] = useState([])
     const [searchQuery, setSearchQuery] = useState("")
@@ -18,7 +121,7 @@ function App() {
     const [locationFilter, setLocationFilter] = useState("")
     const [editingItem, setEditingItem] = useState(null)
     const [isScanning, setIsScanning] = useState(false)
-    const [timeTick, setTimeTick] = useState(Date.now())
+    const [timeTick, setTimeTick] = useState(() => Date.now())
 
     const [session, setSession] = useState(null)
     const [user, setUser] = useState(null)
@@ -28,7 +131,9 @@ function App() {
     const [household, setHousehold] = useState(null)
     const [householdMembers, setHouseholdMembers] = useState([])
     const [showHouseholdManager, setShowHouseholdManager] = useState(false)
-    const [viewMode, setViewMode] = useState("personal")
+    const [inventoryMessage, setInventoryMessage] = useState(null)
+    // Default to shared pantry when user belongs to a household (personal is opt-in per toggle).
+    const [viewMode, setViewMode] = useState("household")
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -42,6 +147,7 @@ function App() {
                 setSession(session)
                 setUser(session?.user ?? null)
                 if (!session) {
+                    resetInventorySharedColumnProbe()
                     setProfile(null)
                     setHousehold(null)
                     setHouseholdMembers([])
@@ -83,7 +189,7 @@ function App() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [user, viewMode, household])
+    }, [user, viewMode, household, householdMembers])
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -140,70 +246,269 @@ function App() {
         }
     }
 
-    async function fetchItems() {
+    /** @param {"personal"|"household"|undefined} [overrideView] Use after add/update so fetch matches intent before React applies setViewMode. */
+    async function fetchItems(overrideView) {
         if (!user) return
 
-        let query = supabase
-            .from("inventory_items")
-            .select("*, profiles(username)")
-            .order("updated_at", { ascending: false })
+        const mode = overrideView ?? viewMode
 
-        if (viewMode === "personal") {
-            query = query.eq("user_id", user.id)
-        } else if (viewMode === "household" && household) {
-            const memberIds = householdMembers.map(m => m.user_id)
-            if (memberIds.length > 0) {
-                query = query.in("user_id", memberIds)
-            } else {
-                query = query.eq("user_id", user.id)
+        // State can lag right after login: second household member would otherwise hit the
+        // non-household branch for both tabs and see the same "my rows only" list.
+        let resolvedHousehold = household
+        let memberIds = householdMembers.map((m) => m.user_id)
+
+        if (!resolvedHousehold || memberIds.length === 0) {
+            const { data: m0 } = await supabase
+                .from("household_members")
+                .select("household_id")
+                .eq("user_id", user.id)
+                .maybeSingle()
+
+            if (m0?.household_id) {
+                const { data: hhRow, error: hhErr } = await supabase
+                    .from("households")
+                    .select("*")
+                    .eq("id", m0.household_id)
+                    .single()
+                const { data: memRows } = await supabase
+                    .from("household_members")
+                    .select("user_id")
+                    .eq("household_id", m0.household_id)
+
+                if (!hhErr && hhRow) resolvedHousehold = hhRow
+                memberIds = (memRows || []).map((r) => r.user_id)
             }
-        } else {
-            query = query.eq("user_id", user.id)
         }
 
-        const { data, error } = await query
+        if (resolvedHousehold && (!household || householdMembers.length === 0)) {
+            void fetchHousehold()
+        }
 
-        if (error || !data || data.length === 0) {
+        const applyFilters = (q, useSharedColumn) => {
+            if (mode === "personal") {
+                q = q.eq("user_id", user.id)
+                if (useSharedColumn) q = q.eq("shared_with_household", false)
+            } else if (mode === "household" && resolvedHousehold) {
+                if (memberIds.length > 0) {
+                    q = q.in("user_id", memberIds)
+                    if (useSharedColumn) q = q.eq("shared_with_household", true)
+                } else {
+                    q = q.eq("user_id", user.id)
+                    if (useSharedColumn) q = q.eq("shared_with_household", true)
+                }
+            } else {
+                q = q.eq("user_id", user.id)
+            }
+            return q
+        }
+
+        const runQuery = async (useSharedColumn, orderColumn) => {
+            let q = supabase.from("inventory_items").select("*")
+            q = applyFilters(q, useSharedColumn)
+            if (orderColumn === "created_at") {
+                q = q.order("created_at", { ascending: false })
+            } else if (orderColumn === "updated_at") {
+                q = q.order("updated_at", { ascending: false })
+            }
+            return q
+        }
+
+        let { data, error } = await runQuery(true, "created_at")
+
+        if (error) {
+            console.warn("fetchItems (created_at + shared filter):", error.message)
+            ;({ data, error } = await runQuery(true, null))
+        }
+        if (error) {
+            console.warn("fetchItems (no order + shared filter):", error.message)
+            ;({ data, error } = await runQuery(true, "updated_at"))
+        }
+        if (error) {
+            console.warn("fetchItems (updated_at + shared filter):", error.message)
+            ;({ data, error } = await runQuery(false, null))
+        }
+
+        if (error) {
+            console.warn("fetchItems:", error.message)
+            setInventoryMessage(`Could not load inventory: ${error.message}`)
+            if (mode === "personal") {
+                const localKey = `grub_guide_backup_${user.id}`
+                setItems(JSON.parse(localStorage.getItem(localKey) || "[]"))
+            } else {
+                setItems([])
+            }
+            return
+        }
+
+        setInventoryMessage(null)
+        let rows = data || []
+
+        // Household tab: only explicitly shared rows when the column is present on any row.
+        if (
+            mode === "household" &&
+            resolvedHousehold &&
+            rows.length > 0 &&
+            rows.some((r) => typeof r.shared_with_household === "boolean")
+        ) {
+            rows = rows.filter((r) => r.shared_with_household === true)
+        }
+
+        if (resolvedHousehold && rows.length > 0) {
+            const hasBoolShared = rows.some(
+                (r) => r.shared_with_household === true || r.shared_with_household === false
+            )
+            if (hasBoolShared) {
+                let priv = loadPrivacyItemIdSet(user.id)
+                let privDirty = false
+                for (const r of rows) {
+                    if (r.shared_with_household === true && priv.has(String(r.id))) {
+                        priv.delete(String(r.id))
+                        privDirty = true
+                    }
+                }
+                if (privDirty) savePrivacyItemIdSet(user.id, priv)
+
+                if (mode === "personal") {
+                    rows = rows.filter((r) => r.shared_with_household === false)
+                } else if (mode === "household") {
+                    rows = rows.filter((r) => r.shared_with_household === true)
+                }
+            } else {
+                const priv = loadPrivacyItemIdSet(user.id)
+                if (mode === "personal") {
+                    rows = rows.filter(
+                        (r) => String(r.user_id) === String(user.id) && priv.has(String(r.id))
+                    )
+                } else if (mode === "household") {
+                    rows = rows.filter(
+                        (r) => !(String(r.user_id) === String(user.id) && priv.has(String(r.id)))
+                    )
+                }
+            }
+        }
+
+        setItems(rows)
+        if (mode === "personal") {
             const localKey = `grub_guide_backup_${user.id}`
-            const localData = JSON.parse(localStorage.getItem(localKey) || "[]")
-            setItems(localData)
-        } else {
-            setItems(data)
+            localStorage.setItem(localKey, JSON.stringify(rows))
         }
     }
 
     async function handleAddItem(newItem) {
-        const itemWithMeta = {
-            ...newItem,
-            id: Math.random().toString(36).substr(2, 9),
-            created_at: new Date().toISOString(),
-            last_used_at: new Date().toISOString(),
-            times_used: 0,
-            user_id: user?.id
+        if (!user?.id) return
+
+        const shared =
+            newItem.shared_with_household === undefined
+                ? Boolean(household)
+                : Boolean(newItem.shared_with_household)
+
+        const now = new Date().toISOString()
+        let id = Math.random().toString(36).substring(2, 11)
+
+        let insertPayload = {
+            id,
+            item_name: newItem.item_name,
+            quantity: Number(newItem.quantity) || 1,
+            unit: (newItem.unit ?? "").trim(),
+            category: newItem.category || "Other",
+            location: newItem.location || "Pantry",
+            household_tag: newItem.household_tag ?? null,
+            expiration_date: newItem.expiration_date ?? null,
+            user_id: user.id,
+            shared_with_household: shared,
+            created_at: now,
+            last_used_at: now,
+            times_used: 0
+        }
+        if (newItem.brand_name != null && newItem.brand_name !== "") {
+            insertPayload.brand_name = newItem.brand_name
+        }
+        if (newItem.shelf_life != null && newItem.shelf_life !== "") {
+            insertPayload.shelf_life = Number(newItem.shelf_life) || 14
         }
 
-        const newItemsList = [itemWithMeta, ...items]
-        setItems(newItemsList)
-        
-        const localKey = user ? `grub_guide_backup_${user.id}` : "grub_guide_backup"
-        localStorage.setItem(localKey, JSON.stringify(newItemsList))
+        if (household && !shared) {
+            const colOk = await inventoryHasSharedWithHouseholdColumn()
+            if (!colOk) {
+                setInventoryMessage(
+                    "My list only cannot be saved to the database until Supabase has a shared_with_household column and household RLS (otherwise every household member can see the row). Update your Supabase schema and policies, then refresh this page."
+                )
+                return
+            }
+        }
 
-        await supabase.from("inventory_items").insert([itemWithMeta])
+        const { error: insertError, inserted } = await insertInventoryRow(insertPayload)
+
+        if (insertError) {
+            console.error("Insert inventory failed:", insertError)
+            setInventoryMessage(`Could not save item: ${insertError.message}`)
+            await fetchItems()
+            return
+        }
+
+        setInventoryMessage(null)
+
+        if (household && inserted?.id) {
+            if (shared) markPrivacyItemShared(user.id, String(inserted.id))
+            else markPrivacyItemPersonal(user.id, String(inserted.id))
+        }
+
+        if (household) {
+            if (shared) {
+                setViewMode("household")
+                await fetchItems("household")
+            } else {
+                setViewMode("personal")
+                await fetchItems("personal")
+            }
+        } else {
+            await fetchItems()
+        }
     }
 
     async function handleUpdateItem(id, updatedFields) {
-        const { error } = await supabase
-            .from("inventory_items")
-            .update(updatedFields)
-            .eq("id", id)
+        if (household && updatedFields.shared_with_household === false) {
+            const colOk = await inventoryHasSharedWithHouseholdColumn()
+            if (!colOk) {
+                setInventoryMessage(
+                    "Saving as My list only needs the shared_with_household column in Supabase. Add it in the dashboard or SQL editor, then refresh."
+                )
+                return
+            }
+        }
+
+        const { error } = await updateInventoryRow(id, updatedFields)
 
         if (error) {
             console.error("Error updating item:", error)
+            return
         }
+
+        if (household && updatedFields.shared_with_household != null) {
+            if (updatedFields.shared_with_household) markPrivacyItemShared(user.id, String(id))
+            else markPrivacyItemPersonal(user.id, String(id))
+        }
+
+        if (household && updatedFields.shared_with_household === true) {
+            setViewMode("household")
+            setEditingItem(null)
+            await fetchItems("household")
+            return
+        }
+        if (household && updatedFields.shared_with_household === false) {
+            setViewMode("personal")
+            setEditingItem(null)
+            await fetchItems("personal")
+            return
+        }
+
         setEditingItem(null)
+        await fetchItems()
     }
 
     async function handleDelete(id) {
+        if (user) markPrivacyItemShared(user.id, String(id))
+
         const updatedItems = items.filter((item) => item.id !== id)
         setItems(updatedItems)
         
@@ -228,20 +533,6 @@ function App() {
         const list = JSON.parse(localStorage.getItem("grub_guide_shopping_list") || "[]")
         localStorage.setItem("grub_guide_shopping_list", JSON.stringify([item, ...list]))
         alert(`${item.item_name} added to shopping list`)
-    }
-
-    function handleReceiptUpload() {
-        alert("Simulating receipt scan...")
-        setTimeout(() => {
-            handleAddItem({
-                item_name: "Kroger Large Eggs (12ct)",
-                category: "Dairy",
-                location: "Fridge",
-                shelf_life: 21,
-                brand_name: "Kroger"
-            })
-            alert("Receipt processed: Kroger Large Eggs")
-        }, 1200)
     }
 
     async function handleBarcodeScan(decodedText) {
@@ -358,15 +649,15 @@ function App() {
                 <a href="/" style={styles.headerTitleLink}>
                     Grub<span style={styles.headerTitleAccent}>Guide</span>
                 </a>
+                <a
+                    href={KROGER_CALCULATOR_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={styles.krogerTab}
+                >
+                    Kroger Calculator
+                </a>
                 <div style={styles.headerMeta}>
-                    <a
-                        href="https://kroger-calculator.onrender.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={styles.krogerTab}
-                    >
-                        Kroger Calculator
-                    </a>
                     <UserMenu
                         user={user}
                         profile={profile}
@@ -391,13 +682,11 @@ function App() {
             <div style={styles.body}>
                 <div style={styles.toolsRow}>
                     <button
+                        type="button"
                         onClick={() => setIsScanning(!isScanning)}
                         style={{ ...styles.toolBtn, ...(isScanning ? styles.toolBtnDanger : {}) }}
                     >
                         {isScanning ? "Close Scanner" : "Scan Barcode"}
-                    </button>
-                    <button onClick={handleReceiptUpload} style={styles.toolBtnSecondary}>
-                        Upload Receipt
                     </button>
                 </div>
 
@@ -407,12 +696,19 @@ function App() {
                     </div>
                 )}
 
+                {inventoryMessage && (
+                    <div style={styles.inventoryMessage} role="alert">
+                        {inventoryMessage}
+                    </div>
+                )}
+
                 <AddItemForm
                     onAddItem={handleAddItem}
                     editingItem={editingItem}
                     onUpdateItem={handleUpdateItem}
                     onCancelEdit={() => setEditingItem(null)}
                     existingItems={items}
+                    hasHousehold={!!household}
                 />
 
                 {rarelyUsedItems.length > 0 && (
@@ -477,11 +773,12 @@ const styles = {
         margin: "0 auto"
     },
     header: {
-        padding: "28px 24px 20px",
+        padding: "24px 20px 18px",
         borderBottom: "0.5px solid rgba(255,255,255,0.08)",
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
         alignItems: "center",
-        gap: "10px"
+        columnGap: "10px"
     },
     headerTitle: {
         fontFamily: "'DM Serif Display', serif",
@@ -494,29 +791,31 @@ const styles = {
         fontSize: "22px",
         color: "#a8d5b5",
         letterSpacing: "-0.3px",
-        textDecoration: "none"
+        textDecoration: "none",
+        justifySelf: "start"
     },
     headerTitleAccent: {
         color: "#4caf78"
     },
     headerMeta: {
-        marginLeft: "auto",
         display: "flex",
         alignItems: "center",
-        gap: "8px"
+        justifyContent: "flex-end",
+        gap: "8px",
+        justifySelf: "end"
     },
     krogerTab: {
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        color: "rgba(168,213,181,0.5)",
-        padding: "0",
-        borderRadius: "0",
+        display: "block",
+        justifySelf: "center",
+        textAlign: "center",
+        color: "rgba(168,213,181,0.72)",
         textDecoration: "none",
         fontWeight: "600",
         fontSize: "11px",
-        letterSpacing: "2px",
-        textTransform: "uppercase"
+        letterSpacing: "1.25px",
+        textTransform: "uppercase",
+        lineHeight: 1.4,
+        whiteSpace: "nowrap"
     },
     body: {
         padding: "24px"
@@ -526,9 +825,18 @@ const styles = {
         gap: "10px",
         marginBottom: "14px"
     },
+    inventoryMessage: {
+        marginBottom: "12px",
+        padding: "10px 12px",
+        borderRadius: "8px",
+        fontSize: "13px",
+        lineHeight: 1.45,
+        color: "#f1a16d",
+        backgroundColor: "rgba(232,132,90,0.12)",
+        border: "0.5px solid rgba(232,132,90,0.35)"
+    },
     toolBtn: {
-        flex: 1,
-        padding: "12px",
+        padding: "12px 20px",
         border: "0.5px solid rgba(76,175,120,0.35)",
         backgroundColor: "rgba(76,175,120,0.14)",
         color: "#9be1b7",
@@ -540,16 +848,6 @@ const styles = {
         border: "0.5px solid rgba(232,132,90,0.35)",
         backgroundColor: "rgba(232,132,90,0.16)",
         color: "#e8845a"
-    },
-    toolBtnSecondary: {
-        flex: 1,
-        padding: "12px",
-        border: "0.5px solid rgba(127,177,220,0.35)",
-        backgroundColor: "rgba(127,177,220,0.14)",
-        color: "#b9d6ee",
-        borderRadius: "8px",
-        fontWeight: "600",
-        cursor: "pointer"
     },
     scannerWrap: {
         borderRadius: "12px",

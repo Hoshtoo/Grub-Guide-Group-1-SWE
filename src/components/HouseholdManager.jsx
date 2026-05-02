@@ -10,6 +10,44 @@ function generateInviteCode() {
     return result
 }
 
+/** households.created_by and household_members.user_id FK to profiles(id) */
+async function ensureProfileRow() {
+    const { data: { user: sessionUser }, error: authErr } = await supabase.auth.getUser()
+    if (authErr || !sessionUser) {
+        throw new Error("Not signed in")
+    }
+
+    const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", sessionUser.id)
+        .maybeSingle()
+
+    if (existing) return sessionUser
+
+    const metaName = sessionUser.user_metadata?.username?.trim()
+    const emailLocal = sessionUser.email?.split("@")[0]?.trim()
+    let username = (metaName || emailLocal || "user").slice(0, 32)
+    if (!username) username = "user"
+
+    let { error: insertErr } = await supabase.from("profiles").insert({
+        id: sessionUser.id,
+        username
+    })
+
+    if (insertErr?.code === "23505") {
+        username = `${username.slice(0, 20)}_${sessionUser.id.slice(0, 8)}`
+        const retry = await supabase.from("profiles").insert({
+            id: sessionUser.id,
+            username
+        })
+        insertErr = retry.error
+    }
+
+    if (insertErr) throw insertErr
+    return sessionUser
+}
+
 function HouseholdManager({ user, household, members, onClose, onHouseholdChange }) {
     const [mode, setMode] = useState(household ? "view" : "choose")
     const [householdName, setHouseholdName] = useState("")
@@ -34,6 +72,7 @@ function HouseholdManager({ user, household, members, onClose, onHouseholdChange
         setError(null)
 
         try {
+            const sessionUser = await ensureProfileRow()
             const inviteCode = generateInviteCode()
 
             const { data: newHousehold, error: createError } = await supabase
@@ -41,7 +80,7 @@ function HouseholdManager({ user, household, members, onClose, onHouseholdChange
                 .insert({
                     name: householdName.trim(),
                     invite_code: inviteCode,
-                    created_by: user.id
+                    created_by: sessionUser.id
                 })
                 .select()
                 .single()
@@ -52,7 +91,7 @@ function HouseholdManager({ user, household, members, onClose, onHouseholdChange
                 .from("household_members")
                 .insert({
                     household_id: newHousehold.id,
-                    user_id: user.id
+                    user_id: sessionUser.id
                 })
 
             if (joinError) throw joinError
@@ -74,11 +113,13 @@ function HouseholdManager({ user, household, members, onClose, onHouseholdChange
         setError(null)
 
         try {
-            const { data: foundHousehold, error: findError } = await supabase
-                .from("households")
-                .select("*")
-                .eq("invite_code", joinCode.trim().toUpperCase())
-                .single()
+            const sessionUser = await ensureProfileRow()
+
+            const { data: rows, error: findError } = await supabase.rpc(
+                "get_household_by_invite_code",
+                { code: joinCode.trim().toUpperCase() }
+            )
+            const foundHousehold = Array.isArray(rows) ? rows[0] : rows
 
             if (findError || !foundHousehold) {
                 throw new Error("Invalid invite code")
@@ -88,7 +129,7 @@ function HouseholdManager({ user, household, members, onClose, onHouseholdChange
                 .from("household_members")
                 .insert({
                     household_id: foundHousehold.id,
-                    user_id: user.id
+                    user_id: sessionUser.id
                 })
 
             if (joinError) {

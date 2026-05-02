@@ -27,8 +27,7 @@ const BarcodeScanner = ({ onScanSuccess }) => {
       }
     };
 
-    scannerRef.current.render(handleSuccess, (error) => {
-    });
+    scannerRef.current.render(handleSuccess, () => {});
 
     return () => {
       if (scannerRef.current) {

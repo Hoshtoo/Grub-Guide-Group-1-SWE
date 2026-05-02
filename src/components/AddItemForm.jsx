@@ -26,7 +26,7 @@ function findDuplicates(name, existingItems, editingItemId) {
     })
 }
 
-function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, existingItems = [] }) {
+function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, existingItems = [], hasHousehold = false }) {
     const [itemName, setItemName] = useState("")
     const [quantity, setQuantity] = useState(1)
     const [unit, setUnit] = useState("")
@@ -35,6 +35,7 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
     const [householdTag, setHouseholdTag] = useState("")
     const [expirationDate, setExpirationDate] = useState("")
     const [duplicateDismissed, setDuplicateDismissed] = useState(false)
+    const [shareWithHousehold, setShareWithHousehold] = useState(true)
 
     const duplicates = useMemo(
         () => findDuplicates(itemName, existingItems, editingItem?.id),
@@ -50,6 +51,7 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
             setLocation(editingItem.location || "")
             setHouseholdTag(editingItem.household_tag || "")
             setExpirationDate(editingItem.expiration_date || "")
+            setShareWithHousehold(editingItem.shared_with_household !== false)
         }
     }, [editingItem])
 
@@ -62,6 +64,7 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
         setHouseholdTag("")
         setExpirationDate("")
         setDuplicateDismissed(false)
+        setShareWithHousehold(true)
     }
 
     function handleItemNameChange(value) {
@@ -70,7 +73,7 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
     }
 
     function handleSubmit(e) {
-        e.preventDefault()
+        if (e?.preventDefault) e.preventDefault()
         if (!itemName.trim()) return
 
         const payload = {
@@ -80,7 +83,8 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
             category: category || "Other",
             location: location || "Pantry",
             household_tag: householdTag.trim() || null,
-            expiration_date: expirationDate || null
+            expiration_date: expirationDate || null,
+            shared_with_household: hasHousehold ? shareWithHousehold : false
         }
 
         if (editingItem) {
@@ -200,35 +204,72 @@ function AddItemForm({ onAddItem, editingItem, onUpdateItem, onCancelEdit, exist
                 </div>
             </div>
 
-            <div style={styles.row}>
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Household Tag (optional)</label>
+            {hasHousehold ? (
+                <div style={styles.saveToOneLine}>
+                    <span style={styles.inlineLabel}>Save to</span>
+                    <div style={styles.shareChips}>
+                        <button
+                            type="button"
+                            title="Shared with everyone in your household"
+                            onClick={() => setShareWithHousehold(true)}
+                            style={{
+                                ...styles.shareChip,
+                                ...(shareWithHousehold ? styles.shareChipActive : {})
+                            }}
+                        >
+                            Household
+                        </button>
+                        <button
+                            type="button"
+                            title="Visible only to you in My Items"
+                            onClick={() => setShareWithHousehold(false)}
+                            style={{
+                                ...styles.shareChip,
+                                ...(!shareWithHousehold ? styles.shareChipActive : {})
+                            }}
+                        >
+                            My list only
+                        </button>
+                    </div>
+                    <span style={styles.inlineLabel}>Expires</span>
                     <input
-                        style={styles.input}
-                        type="text"
-                        placeholder="e.g. Apt 4B, The Smiths"
-                        value={householdTag}
-                        onChange={(e) => setHouseholdTag(e.target.value)}
-                    />
-                </div>
-
-                <div style={{ ...styles.inputGroup, flex: 1 }}>
-                    <label style={styles.label}>Expiration Date</label>
-                    <input
-                        style={styles.input}
+                        style={styles.dateInputInline}
                         type="date"
                         value={expirationDate}
                         onChange={(e) => setExpirationDate(e.target.value)}
                     />
                 </div>
-            </div>
+            ) : (
+                <div style={styles.row}>
+                    <div style={{ ...styles.inputGroup, flex: 1 }}>
+                        <label style={styles.label}>Household Tag (optional)</label>
+                        <input
+                            style={styles.input}
+                            type="text"
+                            placeholder="e.g. Apt 4B, The Smiths"
+                            value={householdTag}
+                            onChange={(e) => setHouseholdTag(e.target.value)}
+                        />
+                    </div>
+
+                    <div style={{ ...styles.inputGroup, flex: 1 }}>
+                        <label style={styles.label}>Expiration Date</label>
+                        <input
+                            style={styles.input}
+                            type="date"
+                            value={expirationDate}
+                            onChange={(e) => setExpirationDate(e.target.value)}
+                        />
+                    </div>
+                </div>
+            )}
 
             <div style={styles.buttonRow}>
-                <button style={styles.button} onClick={handleSubmit}>
+                <button type="button" style={styles.button} onClick={handleSubmit}>
                     {editingItem ? "Save Changes" : "+ Add Item"}
                 </button>
                 {editingItem && (
-                    <button style={styles.cancelButton} onClick={handleCancel}>
+                    <button type="button" style={styles.cancelButton} onClick={handleCancel}>
                         Cancel
                     </button>
                 )}
@@ -253,6 +294,58 @@ const styles = {
         textTransform: "uppercase",
         letterSpacing: "2.5px",
         margin: "0 0 16px"
+    },
+    saveToOneLine: {
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        flexWrap: "nowrap",
+        gap: "10px",
+        marginBottom: "14px",
+        width: "100%",
+        minWidth: 0
+    },
+    inlineLabel: {
+        fontSize: "10px",
+        color: "rgba(255,255,255,0.35)",
+        textTransform: "uppercase",
+        letterSpacing: "1px",
+        flexShrink: 0,
+        whiteSpace: "nowrap"
+    },
+    shareChips: {
+        display: "flex",
+        gap: "6px",
+        flexWrap: "nowrap",
+        flexShrink: 0
+    },
+    shareChip: {
+        padding: "6px 12px",
+        borderRadius: "20px",
+        border: "0.5px solid rgba(255,255,255,0.15)",
+        backgroundColor: "transparent",
+        color: "rgba(232,240,234,0.55)",
+        fontSize: "12px",
+        fontWeight: "500",
+        cursor: "pointer",
+        whiteSpace: "nowrap"
+    },
+    shareChipActive: {
+        border: "0.5px solid rgba(76,175,120,0.45)",
+        backgroundColor: "rgba(76,175,120,0.18)",
+        color: "#9be1b7"
+    },
+    dateInputInline: {
+        flex: "1 1 auto",
+        minWidth: 0,
+        maxWidth: "160px",
+        padding: "8px 10px",
+        borderRadius: "8px",
+        border: "0.5px solid rgba(255,255,255,0.12)",
+        fontSize: "13px",
+        boxSizing: "border-box",
+        backgroundColor: "rgba(255,255,255,0.06)",
+        color: "#e8f0ea"
     },
     row: {
         display: "flex",
